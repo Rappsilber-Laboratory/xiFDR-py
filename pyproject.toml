@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xifdr"
+dynamic = ["version"]
+description = "xiFDR: A tool for FDR analysis in cross-linking mass spectrometry"
+authors = [
+  { name = "Falk B. Schimweg", email = "git@falk.schimweg.de" }
+]
+license = { text = "AGPL-3.0-or-later" }
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+]
+
+[project.urls]
+Homepage = "https://github.com/Rappsilber-Laboratory/xiFDR-py"
+Documentation = "https://github.com/Rappsilber-Laboratory/xiFDR-py"
+Repository = "https://github.com/Rappsilber-Laboratory/xiFDR-py"
+Issues = "https://github.com/Rappsilber-Laboratory/xiFDR-py/issues"
+
+[tool.setuptools]
+packages = ["xifdr"]
+
+[tool.setuptools_scm]
+write_to = "xifdr/_version.py"  # Auto-generates version info
