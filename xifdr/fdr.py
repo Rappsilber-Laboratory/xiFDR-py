@@ -21,8 +21,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     ]
     for c in list_cols:
         if not isinstance(df[c].dtype, pl.List):
-            df = df.cast(pl.String).with_columns(
-                col(c).str.split(';')
+            df = df.with_columns(
+                col(c).cast(pl.String).str.split(';')
             )
         df = df.with_columns(
             col(c).list.sort()
