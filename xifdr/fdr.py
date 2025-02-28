@@ -197,6 +197,11 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         suffix='p2'
     )
 
+    # Disregard linear peptides from here on
+    df_pep = df_pep.filter(
+        col('base_protein_p2').is_not_null()
+    )
+
     # Calculate link FDR and cutoff
     print('Calculate link FDR and cutoff')
     link_cols = pep_cols.copy()
