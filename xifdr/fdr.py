@@ -20,8 +20,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         'start_pos_p1', 'start_pos_p1',
     ]
     for c in list_cols:
-        if isinstance(df[c].dtype, pl.String):
-            df = df.with_columns(
+        if not isinstance(df[c].dtype, pl.List):
+            df = df.cast(pl.String).with_columns(
                 col(c).str.split(';')
             )
         df = df.with_columns(
