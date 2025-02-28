@@ -9,7 +9,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
              prot_fdr:float = 1.0,
              link_fdr:float = 1.0,
              ppi_fdr:float = 1.0,
-             decoy_adjunct:str = 'REV_'):
+             decoy_adjunct:str = 'REV_',
+             filter_back:bool = True):
     # Convert non-polars DFs
     if not isinstance(df, pl.DataFrame):
         df: pl.DataFrame = pl.DataFrame(df)
@@ -205,10 +206,12 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     # Calculate link FDR and cutoff
     print('Calculate link FDR and cutoff')
     link_cols = pep_cols.copy()
-    #link_cols.remove('aa_len_p1')
-    #link_cols.remove('aa_len_p2')
     link_cols.remove('start_pos_p1')
     link_cols.remove('start_pos_p2')
+    link_cols.remove('sequence_p1')
+    link_cols.remove('sequence_p2')
+    link_cols.remove('coverage_p1')
+    link_cols.remove('coverage_p2')
     link_merge_cols = [c for c in df_pep.columns if c not in link_cols+never_agg_cols]
     df_link = df_pep.group_by(link_cols).agg(
         (col('score')**2).sum().sqrt(),
@@ -241,6 +244,24 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         single_bi_fdr(df_ppi).alias('ppi_fdr')
     )
     df_ppi = df_ppi.filter(col('ppi_fdr') <= ppi_fdr)
+
+    # Back-fitler levels
+    if filter_back:
+        df_link = df_link.join(
+            df_ppi.select(ppi_cols),
+            on=ppi_cols,
+            how='left'
+        )
+        df_pep = df_pep.join(
+            df_link.select(link_cols),
+            on=link_cols,
+            how='left'
+        )
+        df_psm = df_psm.join(
+            df_pep.select(pep_cols),
+            on=pep_cols,
+            how='left'
+        )
 
     return df_psm, df_pep, df_link, df_ppi, passed_prots
 
