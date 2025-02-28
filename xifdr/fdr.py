@@ -317,7 +317,10 @@ def single_fdr(df: pl.DataFrame | pd.DataFrame) -> pl.Series:
 
     working_df = working_df.with_row_index(order_col)
     working_df = working_df.sort('score', descending=True)
-    fdr_raw = (working_df['TD'].cum_sum() - working_df['DD'].cum_sum()) / working_df['TT'].cum_sum()
+    fdr_raw = (
+        (working_df['TD'].cast(pl.Int8).cum_sum() - working_df['DD'].cast(pl.Int8).cum_sum())
+        / working_df['TT'].cast(pl.Int8).cum_sum()
+    )
     working_df = working_df.with_columns(
         fdr_raw.reverse().cum_min().reverse().alias('fdr')
     )
