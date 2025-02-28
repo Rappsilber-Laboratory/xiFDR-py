@@ -1,1 +1,7 @@
+build
 docs/_build
+dist
+.pypirc
+*.egg-info
+.idea
+xifdr/_version.py
