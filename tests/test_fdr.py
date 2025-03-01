@@ -1,7 +1,11 @@
+import logging
 import numpy as np
 import polars as pl
 
 from xifdr.fdr import single_fdr, full_fdr
+from xifdr.boosting import boost
+
+logging.basicConfig(level=logging.DEBUG)
 
 def test_single_fdr_large():
     tt_arr = np.arange(10_000).astype(float)
@@ -127,5 +131,25 @@ def test_single_fdr_monotone():
 
 def test_full_fdr():
     samples = pl.read_parquet('../samples_data.parquet')
-    full_fdr(samples)
+    #x = full_fdr(samples)
+    #pass
+    x = full_fdr(
+        samples,
+        psm_fdr=0.5,
+        pep_fdr=0.5,
+        prot_fdr=0.3,
+        link_fdr=0.05,
+        ppi_fdr=0.05
+    )
     pass
+
+
+def test_boosting():
+    samples = pl.read_parquet('../samples_data.parquet')
+    fdrs = boost(
+        samples,
+        link_fdr=(0, 0.05),
+        ppi_fdr=(0, 0.05),
+    )
+    print(fdrs)
+    assert(False)

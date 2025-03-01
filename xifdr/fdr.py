@@ -263,7 +263,13 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
             how='left'
         )
 
-    return df_psm, df_pep, df_link, df_ppi, passed_prots
+    return {
+        'psm': df_psm,
+        'pep': df_pep,
+        'prot': passed_prots,
+        'link': df_link,
+        'ppi': df_ppi,
+    }
 
 
 def single_bi_fdr(df: pl.DataFrame | pd.DataFrame) -> pl.Series:
