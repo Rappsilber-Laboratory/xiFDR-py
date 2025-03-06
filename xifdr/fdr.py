@@ -10,23 +10,55 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
              link_fdr:float = 1.0,
              ppi_fdr:float = 1.0,
              decoy_adjunct:str = 'REV_',
+             unique_psm: bool = True,
              filter_back:bool = True):
     # Convert non-polars DFs
     if not isinstance(df, pl.DataFrame):
         df: pl.DataFrame = pl.DataFrame(df)
 
     # Convert semicolon separated string columns to lists
-    list_cols = [
-        'protein_p1', 'protein_p2',
-        'start_pos_p1', 'start_pos_p1',
+    list_cols_1 = [
+        'protein_p1', 'start_pos_p1'
     ]
+    list_cols_2 = [
+        'protein_p2', 'start_pos_p2'
+    ]
+    list_cols = list_cols_1 + list_cols_2
     for c in list_cols:
         if not isinstance(df[c].dtype, pl.List):
             df = df.with_columns(
                 col(c).cast(pl.String).str.split(';')
             )
+    # Sort list columns by protein group order
+    df = df.with_columns(
+        col('protein_p1').list.eval(pl.element().arg_sort()).alias('protein_p1_ord')
+    )
+    df = df.with_columns(
+        col('protein_p2').list.eval(pl.element().arg_sort()).alias('protein_p2_ord')
+    )
+    for c in list_cols_1:
         df = df.with_columns(
-            col(c).list.sort()
+            col(c).list.gather(col('protein_p1_ord'))
+        )
+    for c in list_cols_2:
+        df = df.with_columns(
+            col(c).list.gather(col('protein_p2_ord'))
+        )
+    # Swap peptides based on joined protein group
+    df = df.with_columns(
+        pl.when(
+            col('protein_p1').list.join(';') > col('protein_p2').list.join(';')
+        ).then(True).when(
+            (col('protein_p1').list.join(';') == col('protein_p2').list.join(';'))
+            & (col('sequence_p1') > col('sequence_p2'))
+        ).then(True).otherwise(False).alias('swap_mask')
+    )
+    pair_cols1 = ['decoy_p1', 'cl_pos_p1', 'start_pos_p1', 'sequence_p1', 'protein_p1']
+    pair_cols2 = ['decoy_p2', 'cl_pos_p2', 'start_pos_p2', 'sequence_p2', 'protein_p2']
+    for c1, c2 in zip(pair_cols1, pair_cols2):
+        df = df.with_columns(
+           pl.when(col('swap_mask')).then(col(c2)).otherwise(col(c1)).alias(c1),
+           pl.when(col('swap_mask')).then(col(c1)).otherwise(col(c2)).alias(c2),
         )
 
     # Check for required columns
@@ -70,7 +102,10 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     psm_cols = required_columns.copy()
     psm_cols.remove('score')
     psm_cols.remove('decoy_class')
-    df_psm = df.sort('score', descending=True).unique(subset=psm_cols, keep='first')
+    if unique_psm:
+        df_psm = df.sort('score', descending=True).unique(subset=psm_cols, keep='first')
+    else:
+        df_psm = df
 
     # Calculate PSM FDR and cutoff
     print('Calculate PSM FDR and cutoff')
