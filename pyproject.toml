@@ -18,6 +18,8 @@ dependencies = [
     "polars",
     "scipy",
     "psutil",
+    "pyarrow",
+    "setuptools_scm",
 ]
 
 [project.urls]
