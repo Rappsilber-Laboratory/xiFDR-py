@@ -111,6 +111,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     psm_cols = required_columns.copy()
     psm_cols.remove('score')
     psm_cols.remove('decoy_class')
+    psm_cols.remove('coverage_p1')
+    psm_cols.remove('coverage_p2')
 
     if unique_psm:
         df_psm = df.sort('score', descending=True).unique(subset=psm_cols, keep='first')
@@ -241,8 +243,6 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     link_cols.remove('start_pos_p2')
     link_cols.remove('sequence_p1')
     link_cols.remove('sequence_p2')
-    link_cols.remove('coverage_p1')
-    link_cols.remove('coverage_p2')
     link_merge_cols = [c for c in df_pep.columns if c not in link_cols+never_agg_cols]
     df_link = df_pep.group_by(link_cols).agg(
         (col('score')**2).sum().sqrt(),
