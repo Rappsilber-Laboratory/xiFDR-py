@@ -30,11 +30,11 @@ def boost(df: pl.DataFrame,
         bounds=[
             psm_fdr, pep_fdr, prot_fdr, link_fdr, ppi_fdr
         ],
-        strategy='best2bin',
+        strategy='currenttobest1',
         disp=True,
         mutation=(0.01, 0.5),
-        popsize=15,
-        workers=3
+        popsize=5,
+        recombination=0.3
     )
 
 
