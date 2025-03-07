@@ -125,8 +125,14 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     pep_cols = psm_cols.copy()
     pep_cols.remove('charge')
     pep_merge_cols = [c for c in df_psm.columns if c not in pep_cols+never_agg_cols]
+    coverage_p1_prop = col('coverage_p1') / (col('coverage_p1') + col('coverage_p2'))
+    coverage_p2_prop = col('coverage_p2') / (col('coverage_p1') + col('coverage_p2'))
+    protein_score_p1 = (col('score') * coverage_p1_prop).alias("protein_score_p1")
+    protein_score_p2 = (col('score') * coverage_p2_prop).alias("protein_score_p2")
     df_pep = df_psm.group_by(pep_cols).agg(
-        col('score').max(),
+        (col('score').list.eval(pl.element()**2)).sum().sqrt(),
+        (protein_score_p1.list.eval(pl.element()**2)).sum().sqrt(),
+        (protein_score_p2.list.eval(pl.element()**2)).sum().sqrt(),
         *first_aggs,
         *[
             col(c).flatten()
@@ -138,24 +144,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     )
     df_pep = df_pep.filter(col('pep_fdr') <= pep_fdr)
 
-    # Unpack filtered peptide level to back-filtered PSM level
-    df_psm_filtered = df_pep
-
-    # Distribute score by peptide coverage for protein group FDR
-    df_psm_filtered = df_psm_filtered.with_columns(
-        (
-            df_psm_filtered['coverage_p1'] / (
-                df_psm_filtered['coverage_p1'] + df_psm_filtered['coverage_p2']
-            )
-        ).alias('coverage_p1_prop')
-    )
-    df_psm_filtered = df_psm_filtered.with_columns(
-        (df_psm_filtered['score'] * df_psm_filtered['coverage_p1_prop']).alias('protein_score_p1'),
-        (df_psm_filtered['score'] / df_psm_filtered['coverage_p1_prop']).alias('protein_score_p2')
-    )
-
     # Construct protein (group) DF
-    df_prot_p1 = df_psm_filtered.select([
+    df_prot_p1 = df_pep.select([
         'protein_p1', 'protein_score_p1', 'decoy_p1'
     ]).rename({
         'protein_p1': 'protein',
@@ -163,7 +153,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         'decoy_p1': 'decoy',
     })
 
-    df_prot_p2 = df_psm_filtered.select([
+    df_prot_p2 = df_pep.select([
         'protein_p2', 'protein_score_p2', 'decoy_p2'
     ]).rename({
         'protein_p2': 'protein',
