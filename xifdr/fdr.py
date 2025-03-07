@@ -82,6 +82,9 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     if len(missing_columns) > 0:
         raise Exception(f'Missing required columns: {missing_columns}')
 
+    # Make score positive
+    df.with_columns(col('score') + col('score').min())
+
     # Calculate one-hot encoded target/decoy labels
     df.with_columns(
         ((~col('decoy_p1')) & (~col('decoy_p2'))).alias('TT'),
@@ -101,7 +104,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
 
     psm_cols = required_columns.copy()
     psm_cols.remove('score')
-    psm_cols.remove('decoy_class')
+    psm_cols.remove('coverage_p1')
+    psm_cols.remove('coverage_p2')
     if unique_psm:
         df_psm = df.sort('score', descending=True).unique(subset=psm_cols, keep='first')
     else:
@@ -192,8 +196,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     passed_prots = passed_prots.list.join(';')
     passed_prots = passed_prots.unique().alias('passed_prots')
 
-    ## Filter left over peptide pairs (using polar)
-    print('Filter left over peptide pairs (using polar)')
+    ## Filter left over peptide pairs
+    print('Filter left over peptide pairs')
     df_pep = df_pep.with_columns(
         (
             col('protein_p1')
