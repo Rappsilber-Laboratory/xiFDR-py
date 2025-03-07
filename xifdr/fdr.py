@@ -106,8 +106,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     psm_cols.remove('score')
     psm_cols.remove('coverage_p1')
     psm_cols.remove('coverage_p2')
-    for c in never_agg_cols:
-        psm_cols.remove(c)
+    psm_cols.remove('decoy_class')
 
     if unique_psm:
         df_psm = df.sort('score', descending=True).unique(subset=psm_cols, keep='first')
