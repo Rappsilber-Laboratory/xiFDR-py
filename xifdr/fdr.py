@@ -178,7 +178,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         df_prot_p2
     ])
     df_prot = df_prot.group_by(['protein', 'decoy']).agg(
-        (col('score')**2).sum().sqrt()
+        (col('score').list.eval(pl.element()**2)).sum().sqrt()
     )
     df_prot = df_prot.with_columns(
         col('decoy').alias('DD'),
@@ -255,7 +255,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     link_cols.remove('coverage_p2')
     link_merge_cols = [c for c in df_pep.columns if c not in link_cols+never_agg_cols]
     df_link = df_pep.group_by(link_cols).agg(
-        (col('score')**2).sum().sqrt(),
+        (col('score').list.eval(pl.element()**2)).sum().sqrt(),
         *first_aggs,
         *[
             col(c).flatten()
@@ -274,7 +274,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     ppi_cols.remove('cl_pos_p2')
     ppi_merge_cols = [c for c in df_link.columns if c not in ppi_cols+never_agg_cols]
     df_ppi = df_link.group_by(ppi_cols).agg(
-        (col('score')**2).sum().sqrt(),
+        (col('score').list.eval(pl.element()**2)).sum().sqrt(),
         *first_aggs,
         *[
             col(c).flatten()
