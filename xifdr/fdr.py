@@ -3,7 +3,7 @@ import pandas as pd
 import polars as pl
 import cython
 from polars import col
-from .utils._double_argsort_batch import double_argsort_batch
+from xifdr.utils.double_argsort_batch import double_argsort_batch
 
 
 def full_fdr(df: pl.DataFrame | pd.DataFrame,
