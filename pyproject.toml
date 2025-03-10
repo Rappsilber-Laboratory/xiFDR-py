@@ -31,6 +31,9 @@ Issues = "https://github.com/Rappsilber-Laboratory/xiFDR-py/issues"
 
 [tool.setuptools]
 packages = ["xifdr"]
+ext-modules = [
+  {name = "double_argsort_batch", sources = ["xifdr/utils/_double_argsort_batch.pyx"]}
+]
 
 [tool.setuptools_scm]
 write_to = "xifdr/_version.py"  # Auto-generates version info
