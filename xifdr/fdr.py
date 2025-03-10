@@ -61,7 +61,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         )
 
     # Swap peptides based on joined protein group
-    swap_mask = (
+    swap_mask = df.select(
         (
             col('sequence_p1')
             +col('protein_p1').list.join(';')
@@ -71,7 +71,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
             +col('protein_p2').list.join(';')
             +col('start_pos_p2').cast(pl.List(pl.String)).list.join(';')
         )
-    )
+    ).to_series()
     pair_cols1 = ['decoy_p1', 'start_pos_p1', 'link_pos_p1', 'sequence_p1', 'protein_p1']
     pair_cols2 = ['decoy_p2', 'start_pos_p2', 'link_pos_p2', 'sequence_p2', 'protein_p2']
     for c1, c2 in zip(pair_cols1, pair_cols2):
