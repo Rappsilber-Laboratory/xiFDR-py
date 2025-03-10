@@ -2,10 +2,11 @@ import os
 from functools import partial
 import logging
 
+import numpy as np
 import pandas as pd
 from polars import col
 import polars as pl
-from scipy.optimize import differential_evolution
+from scipy.optimize import differential_evolution, brute
 import psutil
 from .fdr import full_fdr
 
@@ -18,24 +19,91 @@ def boost(df: pl.DataFrame,
           link_fdr: (float, float) = (0.0, 1.0),
           ppi_fdr: (float, float) = (0.0, 1.0),
           boost_level: str = "ppi",
-          boost_between: bool = True):
+          boost_between: bool = True,
+          method: str = "brute"):
+    if method == 'brute':
+        return boost_rec_brute(
+            df=df,
+            psm_fdr=psm_fdr,
+            pep_fdr=pep_fdr,
+            prot_fdr=prot_fdr,
+            link_fdr=link_fdr,
+            ppi_fdr=ppi_fdr,
+            boost_level=boost_level,
+            boost_between=boost_between
+        )
+    else:
+        raise ValueError(f'Unkown boosting method: {method}')
+
+def boost_rec_brute(df: pl.DataFrame,
+                    psm_fdr: (float, float) = (0.0, 1.0),
+                    pep_fdr: (float, float) = (0.0, 1.0),
+                    prot_fdr: (float, float) = (0.0, 1.0),
+                    link_fdr: (float, float) = (0.0, 1.0),
+                    ppi_fdr: (float, float) = (0.0, 1.0),
+                    boost_level: str = "ppi",
+                    boost_between: bool = True,
+                    countdown: int = 5,
+                    Ns: int = 3):
+    start_params = (
+        psm_fdr,
+        pep_fdr,
+        prot_fdr,
+        link_fdr,
+        ppi_fdr
+    )
+    current_params = start_params
+    current_spreads = np.array([
+        psm_fdr[1] - psm_fdr[0],
+        pep_fdr[1] - pep_fdr[0],
+        prot_fdr[1] - prot_fdr[0],
+        link_fdr[1] - link_fdr[0],
+        ppi_fdr[1] - ppi_fdr[0],
+    ])
     func = partial(
         _optimization_template,
         df=df,
         boost_level=boost_level,
         boost_between=boost_between,
     )
-    return differential_evolution(
-        func,
-        bounds=[
-            psm_fdr, pep_fdr, prot_fdr, link_fdr, ppi_fdr
-        ],
-        strategy='currenttobest1',
-        disp=True,
-        mutation=(0.01, 0.5),
-        popsize=5,
-        recombination=0.3
-    )
+    best_result = -1
+    current_countdown = countdown
+    current_best_params = None
+    while True:
+        # Find the best params for the current search space
+        best_params, result = brute(
+            func,
+            ranges=current_params,
+            Ns=Ns
+        )
+        # Make the result positive
+        result *= -1
+        # Check whether there was an improvement
+        if result <= best_result:
+            # If no improvement decrease countdown
+            current_countdown -= 1
+            if current_countdown == 0:
+                break
+        else:
+            print(f'New highscore: {result}')
+            # If improvement reset countdown and update best result/params
+            best_result = result
+            current_best_params = best_params
+            current_countdown = countdown
+        # Narrow search space
+        current_spreads /= 2
+        # Generate next params
+        next_params = ()
+        for i, p in enumerate(best_params):
+            # Clip params to initial values
+            next_params += ((
+                max(p - current_spreads[i]/2, start_params[i][0]),
+                min(p + current_spreads[i] / 2, start_params[i][1])
+            ),)
+        current_params = next_params
+        print(f'Next params: {next_params}')
+    # Return the final best params
+    return current_best_params
 
 
 def _optimization_template(fdrs,
