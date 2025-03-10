@@ -74,8 +74,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
             +col('link_pos_p2').cast(pl.List(pl.String)).list.join(';')
         )
     ).to_series()
-    pair_cols1 = ['decoy_p1', 'start_pos_p1', 'link_pos_p1', 'sequence_p1', 'protein_p1']
-    pair_cols2 = ['decoy_p2', 'start_pos_p2', 'link_pos_p2', 'sequence_p2', 'protein_p2']
+    pair_cols1 = ['sequence_p1', 'protein_p1', 'start_pos_p1', 'link_pos_p1', 'decoy_p1']
+    pair_cols2 = ['sequence_p2', 'protein_p2', 'start_pos_p2', 'link_pos_p2', 'decoy_p2']
     for c1, c2 in zip(pair_cols1, pair_cols2):
         df = df.with_columns(
            pl.when(swap_mask).then(col(c2)).otherwise(col(c1)).alias(c1),
@@ -336,7 +336,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     return {
         'psm': df_psm,
         'pep': df_pep,
-        'prot': passed_prots,
+        'prot': df_prot,
         'link': df_link,
         'ppi': df_ppi,
     }
