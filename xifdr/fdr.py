@@ -2,7 +2,6 @@ import typing
 import pandas as pd
 import polars as pl
 import cython
-from lxml.html.builder import TT
 from polars import col
 from .utils._double_argsort_batch import double_argsort_batch
 
