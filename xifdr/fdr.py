@@ -210,8 +210,12 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         df_prot_p1,
         df_prot_p2
     ])
-    df_prot = df_prot.group_by(['protein', 'decoy']).agg(
-        (col('score')**2).sum().sqrt()
+    df_prot = df_prot.with_columns(
+        protein_group = col('protein').list.unique()
+    )
+    df_prot = df_prot.group_by(['protein_group', 'decoy']).agg(
+        (col('score')**2).sum().sqrt(),
+        col('protein')
     )
     df_prot = df_prot.with_columns(
         DD = col('decoy'),
@@ -221,6 +225,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     df_prot = df_prot.with_columns(
         prot_fdr = single_fdr(df_prot)
     )
+    df_prot = df_prot.explode('protein')
     df_prot = df_prot.filter(col('prot_fdr') <= prot_fdr)
 
     passed_prots = df_prot['protein']
