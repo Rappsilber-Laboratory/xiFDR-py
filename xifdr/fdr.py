@@ -71,7 +71,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
             col('sequence_p2')+'|'+
             +col('protein_p2').list.join(';')+'|'+
             +col('start_pos_p2').cast(pl.List(pl.String)).list.join(';')+'|'+
-            +col('link_pos_p1').cast(pl.List(pl.String)).list.join(';')
+            +col('link_pos_p2').cast(pl.List(pl.String)).list.join(';')
         )
     ).to_series()
     pair_cols1 = ['decoy_p1', 'start_pos_p1', 'link_pos_p1', 'sequence_p1', 'protein_p1']
