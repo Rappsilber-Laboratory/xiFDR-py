@@ -1,6 +1,10 @@
+import typing
 import pandas as pd
 import polars as pl
+import cython
+from lxml.html.builder import TT
 from polars import col
+from .utils._double_argsort_batch import double_argsort_batch
 
 
 def full_fdr(df: pl.DataFrame | pd.DataFrame,
@@ -29,13 +33,25 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
             df = df.with_columns(
                 col(c).cast(pl.String).str.split(';')
             )
+
     # Sort list columns by protein group order
     df = df.with_columns(
-        col('protein_p1').list.eval(pl.element().arg_sort()).alias('protein_p1_ord')
+        protein_p1_ord = pl.struct(["protein_p1", "start_pos_p1"]).map_batches(
+            lambda x: pl.Series(double_argsort_batch(
+                x.struct.field('protein_p1').to_list(),
+                x.struct.field('start_pos_p1').to_list()
+            ))
+        )
     )
-    df = df.with_columns(
-        col('protein_p2').list.eval(pl.element().arg_sort()).alias('protein_p2_ord')
+    df = df.filter(col('protein_p2').is_not_null()).with_columns(
+        protein_p2_ord = pl.struct(["protein_p2", "start_pos_p2"]).map_batches(
+            lambda x: pl.Series(double_argsort_batch(
+                x.struct.field('protein_p2').to_list(),
+                x.struct.field('start_pos_p2').to_list()
+            ))
+        )
     )
+
     for c in list_cols_1:
         df = df.with_columns(
             col(c).list.gather(col('protein_p1_ord'))
@@ -44,34 +60,37 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         df = df.with_columns(
             col(c).list.gather(col('protein_p2_ord'))
         )
+
     # Swap peptides based on joined protein group
-    df = df.with_columns(
-        pl.when(
-            col('protein_p1').list.join(';') > col('protein_p2').list.join(';')
-        ).then(True).when(
-            (col('protein_p1').list.join(';') == col('protein_p2').list.join(';'))
-            & (col('sequence_p1') > col('sequence_p2'))
-        ).then(True).otherwise(False).alias('swap_mask')
+    swap_mask = (
+        (
+            col('sequence_p1')
+            +col('protein_p1').list.join(';')
+            +col('start_pos_p1').cast(pl.List(pl.String)).list.join(';')
+        ) > (
+            col('sequence_p2')
+            +col('protein_p2').list.join(';')
+            +col('start_pos_p2').cast(pl.List(pl.String)).list.join(';')
+        )
     )
-    pair_cols1 = ['decoy_p1', 'cl_pos_p1', 'start_pos_p1', 'sequence_p1', 'protein_p1']
-    pair_cols2 = ['decoy_p2', 'cl_pos_p2', 'start_pos_p2', 'sequence_p2', 'protein_p2']
+    pair_cols1 = ['decoy_p1', 'start_pos_p1', 'sequence_p1', 'protein_p1']
+    pair_cols2 = ['decoy_p2', 'start_pos_p2', 'sequence_p2', 'protein_p2']
     for c1, c2 in zip(pair_cols1, pair_cols2):
         df = df.with_columns(
-           pl.when(col('swap_mask')).then(col(c2)).otherwise(col(c1)).alias(c1),
-           pl.when(col('swap_mask')).then(col(c1)).otherwise(col(c2)).alias(c2),
+           pl.when(swap_mask).then(col(c2)).otherwise(col(c1)).alias(c1),
+           pl.when(swap_mask).then(col(c1)).otherwise(col(c2)).alias(c2),
         )
 
     # Check for required columns
     required_columns = [
         'score',  # Match score
         'decoy_p1', 'decoy_p2',  # Target/decoy classification
-        'decoy_class',  # Self- or between-link
+        #'decoy_class',  # Self- or between-link
         'charge',  # Precursor charge
-        'cl_pos_p1', 'cl_pos_p2',  # Positions of crosslinks in the protein sequences
         'start_pos_p1', 'start_pos_p2',  # Position of peptides in proteins origins
+        'link_pos_p1', 'link_pos_p2',  # Position of the link in the peptides
         'sequence_p1', 'sequence_p2',  # Peptide sequences including modifications
         'protein_p1', 'protein_p2',  # Protein origins of the peptides
-        'coverage_p1', 'coverage_p2'  # Fragment coverage for the peptides
     ]
 
     # Check for required columns
@@ -85,19 +104,38 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     # Make score positive
     df.with_columns(col('score') + col('score').min())
 
+    # Put in dummy coverage if none provided
+    df = df.with_columns(
+        coverage_p1 = pl.lit(0.5),
+        coverage_p2 = pl.lit(0.5)
+    )
+
+    # Calculate decoy_class column
+    df = df.with_columns(
+        decoy_class = pl.when(
+            col('decoy_p1') & (col('decoy_p2') | col('decoy_p2').is_null())
+        ).then(pl.lit('DD')).when(
+            (~col('decoy_p1')) & ((~col('decoy_p2')) | col('decoy_p2').is_null())
+        ).then(pl.lit('TT')).otherwise(pl.lit('TD'))
+    )
+
     # Calculate one-hot encoded target/decoy labels
     df.with_columns(
-        ((~col('decoy_p1')) & (~col('decoy_p2'))).alias('TT'),
-        (col('decoy_p1') & col('decoy_p2')).alias('DD')
-    )
-    df.with_columns(
-        ((~col('DD')) & (~col('TT'))).alias('TD')
+        TT=(pl.col('decoy_class')=='TT'),
+        TD=(pl.col('decoy_class')=='TD'),
+        DD=(pl.col('decoy_class')=='DD'),
     )
     coverage_p1_prop = col('coverage_p1') / (col('coverage_p1') + col('coverage_p2'))
     coverage_p2_prop = col('coverage_p2') / (col('coverage_p1') + col('coverage_p2'))
     df = df.with_columns(
-        (col('score') * coverage_p1_prop).alias("protein_score_p1"),
-        (col('score') * coverage_p2_prop).alias("protein_score_p2")
+        protein_score_p1 = col('score') * coverage_p1_prop,
+        protein_score_p2 = col('score') * coverage_p2_prop
+    )
+
+    # Calculate crosslink position in protein
+    df = df.with_columns(
+        cl_pos_p1 = col('start_pos_p1').cast(pl.List(pl.Int64)) + col('link_pos_p1'),
+        cl_pos_p2 = col('start_pos_p2').cast(pl.List(pl.Int64)) + col('link_pos_p2'),
     )
 
     # Aggregate unique PSMs
@@ -110,9 +148,11 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
 
     psm_cols = required_columns.copy()
     psm_cols.remove('score')
-    psm_cols.remove('decoy_class')
-    psm_cols.remove('coverage_p1')
-    psm_cols.remove('coverage_p2')
+    psm_cols.remove('start_pos_p1')
+    psm_cols.remove('start_pos_p2')
+    psm_cols.remove('link_pos_p1')
+    psm_cols.remove('link_pos_p2')
+    psm_cols += ['cl_pos_p1', 'cl_pos_p2']
 
     if unique_psm:
         df_psm = df.sort('score', descending=True).unique(subset=psm_cols, keep='first')
@@ -122,7 +162,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     # Calculate PSM FDR and cutoff
     print('Calculate PSM FDR and cutoff')
     df_psm = df_psm.with_columns(
-        single_bi_fdr(df_psm).alias('psm_fdr')
+        psm_fdr = single_bi_fdr(df_psm)
     )
     df_psm = df_psm.filter(col('psm_fdr') <= psm_fdr)
 
@@ -142,7 +182,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         ]
     )
     df_pep = df_pep.with_columns(
-        single_bi_fdr(df_pep).alias('pep_fdr')
+        pep_fdr = single_bi_fdr(df_pep)
     )
     df_pep = df_pep.filter(col('pep_fdr') <= pep_fdr)
 
@@ -173,12 +213,12 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         (col('score')**2).sum().sqrt()
     )
     df_prot = df_prot.with_columns(
-        col('decoy').alias('DD'),
-        col('decoy').not_().alias('TT'),
-        pl.lit(False).alias('TD')  # Abuse CL-FDR for linear case
+        DD = col('decoy'),
+        TT = ~col('decoy'),
+        TD = pl.lit(False)  # Abuse CL-FDR for linear case
     )
     df_prot = df_prot.with_columns(
-        single_fdr(df_prot).alias('prot_fdr')
+        prot_fdr = single_fdr(df_prot)
     )
     df_prot = df_prot.filter(col('prot_fdr') <= prot_fdr)
 
@@ -193,7 +233,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     ## Filter left over peptide pairs
     print('Filter left over peptide pairs')
     df_pep = df_pep.with_columns(
-        (
+        base_protein_p1 = (
             col('protein_p1')
                 # Replace decoy_adjunct
                 .list.join(';')
@@ -203,8 +243,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
                 .list.sort()
                 # Join to protein group
                 .list.join(';')
-        ).alias('base_protein_p1'),
-        (
+        ),
+        base_protein_p2 = (
             col('protein_p2')
                 # Replace decoy_adjunct
                 .list.join(';')
@@ -214,7 +254,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
                 .list.sort()
                 # Join to protein group
                 .list.join(';')
-        ).alias('base_protein_p2'),
+        ),
     )
 
     df_pep.join(
@@ -239,8 +279,6 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     # Calculate link FDR and cutoff
     print('Calculate link FDR and cutoff')
     link_cols = pep_cols.copy()
-    link_cols.remove('start_pos_p1')
-    link_cols.remove('start_pos_p2')
     link_cols.remove('sequence_p1')
     link_cols.remove('sequence_p2')
     link_merge_cols = [c for c in df_pep.columns if c not in link_cols+never_agg_cols]
@@ -253,7 +291,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         ]
     )
     df_link = df_link.with_columns(
-        single_bi_fdr(df_link).alias('link_fdr')
+        link_fdr = single_bi_fdr(df_link)
     )
     df_link = df_link.filter(col('link_fdr') <= link_fdr)
 
@@ -272,7 +310,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         ]
     )
     df_ppi = df_ppi.with_columns(
-        single_bi_fdr(df_ppi).alias('ppi_fdr')
+        ppi_fdr = single_bi_fdr(df_ppi)
     )
     df_ppi = df_ppi.filter(col('ppi_fdr') <= ppi_fdr)
 
@@ -328,7 +366,9 @@ def single_bi_fdr(df: pl.DataFrame | pd.DataFrame) -> pl.Series:
     fdr_with_order = pl.DataFrame(
         schema={**df.schema, **{'fdr': pl.Float32}}
     )
-    fdr_with_order = fdr_with_order.with_columns(pl.lit(0.0).alias('fdr'))
+    fdr_with_order = fdr_with_order.with_columns(
+        fdr = pl.lit(0.0)
+    )
     for dclass in ['self', 'between', 'linear']:
         class_df = df.filter(
             col('fdr_group') == dclass
@@ -359,6 +399,13 @@ def single_fdr(df: pl.DataFrame | pd.DataFrame) -> pl.Series:
         / working_df['TT'].cast(pl.Int8).cum_sum()
     )
     working_df = working_df.with_columns(
-        fdr_raw.reverse().cum_min().reverse().alias('fdr')
+        fdr = fdr_raw.reverse().cum_min().reverse()
     )
     return working_df.sort(order_col)['fdr']
+
+@cython.cfunc
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def _str_zip(protein_list: typing.List[str],
+                 pos_list: typing.List[str]) -> typing.List[str]:
+    return [f'{a};{b}' for a,b in zip(protein_list, pos_list)]
