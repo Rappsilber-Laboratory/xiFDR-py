@@ -145,11 +145,12 @@ def test_full_fdr():
 
 
 def test_boosting():
-    samples = pl.read_parquet('./samples_data.parquet')
+    samples = pl.read_parquet('../samples_data.parquet')
     fdrs = boost(
         samples,
         link_fdr=(0, 0.05),
         ppi_fdr=(0, 0.05),
+        n_jobs=4
     )
     print(fdrs)
     assert(False)
