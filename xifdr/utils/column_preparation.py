@@ -55,15 +55,15 @@ def prepare_columns(df):
     # Swap peptides based on joined protein group
     swap_mask = df.select(
         (
-            col('sequence_p1')+'|'+
-            +col('protein_p1').list.join(';')+'|'+
-            +col('start_pos_p1').cast(pl.List(pl.String)).list.join(';')+'|'+
-            +col('link_pos_p1').cast(pl.List(pl.String)).list.join(';')
+            col('protein_p1').list.join(';')+'§'+
+            col('start_pos_p1').cast(pl.List(pl.String)).list.join(';')+'§'+
+            col('link_pos_p1').cast(pl.List(pl.String)).list.join(';')+'§'+
+            col('sequence_p1')
         ) > (
-            col('sequence_p2')+'|'+
-            +col('protein_p2').list.join(';')+'|'+
-            +col('start_pos_p2').cast(pl.List(pl.String)).list.join(';')+'|'+
-            +col('link_pos_p2').cast(pl.List(pl.String)).list.join(';')
+            col('protein_p2').list.join(';')+'§'+
+            col('start_pos_p2').cast(pl.List(pl.String)).list.join(';')+'§'+
+            col('link_pos_p2').cast(pl.List(pl.String)).list.join(';')+'§'+
+            col('sequence_p2')
         )
     ).to_series()
     pair_cols1 = ['sequence_p1', 'protein_p1', 'start_pos_p1', 'link_pos_p1', 'decoy_p1']
