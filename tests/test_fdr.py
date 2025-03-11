@@ -150,7 +150,9 @@ def test_boosting():
         samples,
         link_fdr=(0, 0.05),
         ppi_fdr=(0, 0.05),
-        n_jobs=4
+        points=5,
+        n_jobs=4,
+        method="manhattan"
     )
     print(fdrs)
     assert(False)
