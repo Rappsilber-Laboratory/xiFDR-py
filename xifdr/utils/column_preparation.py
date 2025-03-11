@@ -22,21 +22,25 @@ def prepare_columns(df):
             )
 
     # Sort list columns by protein group order
-    df = df.with_columns(
-        protein_p1_ord = pl.struct(["protein_p1", "start_pos_p1"]).map_batches(
-            lambda x: pl.Series(double_argsort_batch(
-                x.struct.field('protein_p1').to_list(),
-                x.struct.field('start_pos_p1').to_list()
-            ))
-        )
+    protein_p1_ord = pl.struct(["protein_p1", "start_pos_p1"]).map_batches(
+        lambda x: pl.Series(double_argsort_batch(
+            x.struct.field('protein_p1').to_list(),
+            x.struct.field('start_pos_p1').to_list()
+        ))
     )
-    df = df.filter(col('protein_p2').is_not_null()).with_columns(
-        protein_p2_ord = pl.struct(["protein_p2", "start_pos_p2"]).map_batches(
-            lambda x: pl.Series(double_argsort_batch(
-                x.struct.field('protein_p2').to_list(),
-                x.struct.field('start_pos_p2').to_list()
-            ))
-        )
+    protein_p2_ord = pl.struct(["protein_p2", "start_pos_p2"]).map_batches(
+        lambda x: pl.Series(double_argsort_batch(
+            x.struct.field('protein_p2').to_list(),
+            x.struct.field('start_pos_p2').to_list()
+        ))
+    )
+    df = df.with_columns(
+        protein_p1_ord = protein_p1_ord
+    )
+    df = df.with_columns(
+        col('protein_p2').fill_null([])
+    ).with_columns(
+        protein_p2_ord = protein_p2_ord
     )
 
     for c in list_cols_1:
