@@ -9,7 +9,7 @@ from scipy.optimize import  brute
 from multiprocessing import get_context
 from .fdr import full_fdr
 from .utils.column_preparation import prepare_columns
-from .optimization import manhattan
+from .optimization import manhattan, independent_gird
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +36,21 @@ def boost(df: pl.DataFrame,
             boost_between=boost_between,
             n_jobs=n_jobs
         )
-    if method == 'manhattan':
+    elif method == 'manhattan':
         return boost_manhattan(
+            df=df,
+            psm_fdr=psm_fdr,
+            pep_fdr=pep_fdr,
+            prot_fdr=prot_fdr,
+            link_fdr=link_fdr,
+            ppi_fdr=ppi_fdr,
+            boost_level=boost_level,
+            boost_between=boost_between,
+            points=points,
+            n_jobs=n_jobs
+        )
+    elif method == 'independent_grid':
+        return boost_independent_grid(
             df=df,
             psm_fdr=psm_fdr,
             pep_fdr=pep_fdr,
@@ -70,16 +83,51 @@ def boost_manhattan(df: pl.DataFrame,
         link_fdr,
         ppi_fdr
     )
-    best_params, result = manhattan(
-        _optimization_template,
-        kwargs=dict(
-            df=df,
-            boost_level = boost_level,
-            boost_between=boost_between,
-        ),
-        ranges=start_params,
-        points=points,
+    with get_context('forkserver').Pool(n_jobs) as pool:
+        best_params, result = manhattan(
+            _optimization_template,
+            kwargs=dict(
+                df=df,
+                boost_level = boost_level,
+                boost_between=boost_between,
+            ),
+            ranges=start_params,
+            points=points,
+            workers=pool.map,
+        )
+    return best_params
+
+
+def boost_independent_grid(df: pl.DataFrame,
+                    psm_fdr: (float, float) = (0.0, 1.0),
+                    pep_fdr: (float, float) = (0.0, 1.0),
+                    prot_fdr: (float, float) = (0.0, 1.0),
+                    link_fdr: (float, float) = (0.0, 1.0),
+                    ppi_fdr: (float, float) = (0.0, 1.0),
+                    boost_level: str = "ppi",
+                    boost_between: bool = True,
+                    points: int = 3,
+                    n_jobs: int = 1):
+    df = prepare_columns(df)
+    start_params = (
+        psm_fdr,
+        pep_fdr,
+        prot_fdr,
+        link_fdr,
+        ppi_fdr
     )
+    with get_context('forkserver').Pool(n_jobs) as pool:
+        best_params, result = independent_gird(
+            _optimization_template,
+            kwargs=dict(
+                df=df,
+                boost_level = boost_level,
+                boost_between=boost_between,
+            ),
+            ranges=start_params,
+            points=points,
+            workers=pool.map,
+        )
     return best_params
 
 

@@ -152,7 +152,7 @@ def test_boosting():
         ppi_fdr=(0, 0.05),
         points=5,
         n_jobs=4,
-        method="manhattan"
+        method="independent_grid"
     )
     print(fdrs)
     assert(False)
