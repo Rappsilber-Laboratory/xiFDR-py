@@ -175,18 +175,15 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         suffix='p2'
     )
 
-    # Disregard linear peptides from here on
-    df_pep = df_pep.filter(
-        col('base_protein_p2').is_not_null()
-    )
-
     # Calculate link FDR and cutoff
     print('Calculate link FDR and cutoff')
     link_cols = pep_cols.copy()
     link_cols.remove('sequence_p1')
     link_cols.remove('sequence_p2')
     link_merge_cols = [c for c in df_pep.columns if c not in link_cols+never_agg_cols]
-    df_link = df_pep.group_by(link_cols).agg(
+    df_link = df_pep.filter(
+        col('fdr_group') != "linear" # Disregard linear peptides from here on
+    ).group_by(link_cols).agg(
         (col('score')**2).sum().sqrt(),
         *first_aggs,
         *[
