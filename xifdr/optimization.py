@@ -41,6 +41,10 @@ def manhattan(func,
                 best_params[param_index] + search_spreads[param_index]
             )
             grid[param_index] = np.unique(np.linspace(param_from, param_to, points)).tolist()
+            n_unique = len(grid[param_index])
+            grid = [
+                x[:n_unique] for x in grid
+            ]
             grid = np.transpose(grid)
             results = list(mapper(func_wrapped, grid))
             top_index = np.argmin(results)
