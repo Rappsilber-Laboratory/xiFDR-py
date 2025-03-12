@@ -109,8 +109,8 @@ def independent_gird(func,
 
                 n_unique = len(grid[param_index])
 
-                grids = [
-                    x[:n_unique] for x in grids
+                grid = [
+                    x[:n_unique] for x in grid
                 ]
 
                 # Transpose grid to correct format and append
