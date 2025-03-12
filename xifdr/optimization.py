@@ -106,6 +106,13 @@ def independent_gird(func,
                 grid[param_index] = np.unique(
                     np.linspace(param_from, param_to, points)
                 ).tolist()
+
+                n_unique = len(grid[param_index])
+
+                grids = [
+                    x[:n_unique] for x in grids
+                ]
+
                 # Transpose grid to correct format and append
                 grids.append(
                     np.transpose(grid)
