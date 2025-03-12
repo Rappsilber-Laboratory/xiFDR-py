@@ -21,6 +21,12 @@ def prepare_columns(df):
                 col(c).cast(pl.String).str.split(';')
             )
 
+    # Calculate crosslink position in protein
+    df = df.with_columns(
+        cl_pos_p1 = col('start_pos_p1').cast(pl.List(pl.Int64)) + col('link_pos_p1') - 1,
+        cl_pos_p2 = col('start_pos_p2').cast(pl.List(pl.Int64)) + col('link_pos_p2') - 1,
+    )
+
     # Sort list columns by protein group order
     protein_p1_ord = pl.struct(["protein_p1", "start_pos_p1"]).map_batches(
         lambda x: pl.Series(double_argsort_batch(
@@ -53,19 +59,44 @@ def prepare_columns(df):
         )
 
     # Swap peptides based on joined protein group
+    protein_p1_str = col('protein_p1').list.join(';')
+    protein_p2_str = col('protein_p2').list.join(';')
+    link_pos_p1_str = col('link_pos_p1').cast(pl.String)
+    link_pos_p2_str = col('link_pos_p2').cast(pl.String)
+    cl_pos_p1_str = col('cl_pos_p1').cast(pl.List(pl.String)).list.join(';')
+    cl_pos_p2_str = col('cl_pos_p2').cast(pl.List(pl.String)).list.join(';')
+    # Calculate paddings for joint swap string comparison
+    pad_prot = max(
+        df.select(protein_p1_str.str.len_chars()).to_series().max(),
+        df.select(protein_p2_str.str.len_chars()).to_series().max(),
+    )
+    pad_link = max(
+        df.select(link_pos_p1_str.str.len_chars()).to_series().max(),
+        df.select(link_pos_p2_str.str.len_chars()).to_series().max(),
+    )
+    pad_seq = max(
+        df.select(col('sequence_p1').str.len_chars()).to_series().max(),
+        df.select(col('sequence_p2').str.len_chars()).to_series().max(),
+    )
+    pad_cl = max(
+        df.select(cl_pos_p1_str.str.len_chars()).to_series().max(),
+        df.select(cl_pos_p2_str.str.len_chars()).to_series().max(),
+    )
+    # Generate swap mask
     swap_mask = df.select(
         (
-            col('protein_p1').list.join(';')+'§'+
-            col('start_pos_p1').cast(pl.List(pl.String)).list.join(';')+'§'+
-            col('link_pos_p1').cast(pl.List(pl.String)).list.join(';')+'§'+
-            col('sequence_p1')
+            protein_p1_str.str.pad_start(pad_prot,' ')+
+            cl_pos_p1_str.str.pad_start(pad_cl,' ')+
+            link_pos_p1_str.str.pad_start(pad_link,' ')+
+            col('sequence_p1').str.pad_start(pad_seq,' ')
         ) > (
-            col('protein_p2').list.join(';')+'§'+
-            col('start_pos_p2').cast(pl.List(pl.String)).list.join(';')+'§'+
-            col('link_pos_p2').cast(pl.List(pl.String)).list.join(';')+'§'+
-            col('sequence_p2')
+            protein_p2_str.str.pad_start(pad_prot,' ')+
+            cl_pos_p2_str.str.pad_start(pad_cl,' ')+
+            link_pos_p2_str.str.pad_start(pad_link,' ')+
+            col('sequence_p2').str.pad_start(pad_seq,' ')
         )
     ).to_series()
+    # Swap peptide specific columns
     pair_cols1 = ['sequence_p1', 'protein_p1', 'start_pos_p1', 'link_pos_p1', 'decoy_p1']
     pair_cols2 = ['sequence_p2', 'protein_p2', 'start_pos_p2', 'link_pos_p2', 'decoy_p2']
     for c1, c2 in zip(pair_cols1, pair_cols2):
@@ -105,12 +136,6 @@ def prepare_columns(df):
     df = df.with_columns(
         protein_score_p1 = col('score') * coverage_p1_prop,
         protein_score_p2 = col('score') * coverage_p2_prop
-    )
-
-    # Calculate crosslink position in protein
-    df = df.with_columns(
-        cl_pos_p1 = col('start_pos_p1').cast(pl.List(pl.Int64)) + col('link_pos_p1'),
-        cl_pos_p2 = col('start_pos_p2').cast(pl.List(pl.Int64)) + col('link_pos_p2'),
     )
 
     return df
