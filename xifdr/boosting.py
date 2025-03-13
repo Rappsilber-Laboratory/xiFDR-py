@@ -174,7 +174,7 @@ def _optimization_template(fdrs,
     td = len(result.filter(col('TD')))
     dd = len(result.filter(col('DD')))
     tp = tt + td - dd
-    print(
+    logger.debug(
         f'Estimated true positive matches: {tp}\n'
         f'Parameters: {fdrs}'
     )
