@@ -1,11 +1,9 @@
-import os
 from functools import partial
 import logging
 
-import numpy as np
 from polars import col
 import polars as pl
-from scipy.optimize import  brute
+from contextlib import closing
 from multiprocessing import get_context
 from .fdr import full_fdr
 from .utils.column_preparation import prepare_columns
@@ -83,7 +81,7 @@ def boost_manhattan(df: pl.DataFrame,
         link_fdr,
         ppi_fdr
     )
-    with get_context('forkserver').Pool(n_jobs) as pool:
+    with closing(get_context('spawn').Pool(n_jobs)) as pool:
         best_params, result = manhattan(
             _optimization_template,
             kwargs=dict(
@@ -116,7 +114,7 @@ def boost_independent_grid(df: pl.DataFrame,
         link_fdr,
         ppi_fdr
     )
-    with get_context('forkserver').Pool(n_jobs) as pool:
+    with closing(get_context('spawn').Pool(n_jobs)) as pool:
         best_params, result = independent_gird(
             _optimization_template,
             kwargs=dict(
@@ -155,7 +153,7 @@ def boost_rec_brute(df: pl.DataFrame,
         boost_level=boost_level,
         boost_between=boost_between,
     )
-    with get_context("spawn").Pool(n_jobs) as pool:
+    with closing(get_context("spawn").Pool(n_jobs)) as pool:
         best_params, result = manhattan(
             func,
             ranges=start_params,

@@ -1,10 +1,13 @@
 import typing
+import logging
 import pandas as pd
 import polars as pl
 import cython
 from polars import col
 from xifdr.utils.column_preparation import prepare_columns
 
+
+logger = logging.getLogger(__name__)
 
 def full_fdr(df: pl.DataFrame | pd.DataFrame,
              psm_fdr:float = 1.0,
@@ -60,14 +63,14 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         df_psm = df
 
     # Calculate PSM FDR and cutoff
-    print('Calculate PSM FDR and cutoff')
+    logger.debug('Calculate PSM FDR and cutoff')
     df_psm = df_psm.with_columns(
         psm_fdr = single_bi_fdr(df_psm)
     )
     df_psm = df_psm.filter(col('psm_fdr') <= psm_fdr)
 
     # Calculate peptide FDR and filter
-    print('Calculate peptide FDR and filter')
+    logger.debug('Calculate peptide FDR and filter')
     pep_cols = psm_cols.copy()
     pep_cols.remove('charge')
     pep_merge_cols = [c for c in df_psm.columns if c not in pep_cols+never_agg_cols]
@@ -104,7 +107,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     })
 
     ## Calculate and filter protein group FDR as linear FDR
-    print('Calculate and filter protein group FDR as linear FDR')
+    logger.debug('Calculate and filter protein group FDR as linear FDR')
     df_prot = pl.concat([
         df_prot_p1,
         df_prot_p2
@@ -135,7 +138,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     passed_prots = passed_prots.unique().alias('passed_prots')
 
     ## Filter left over peptide pairs
-    print('Filter left over peptide pairs')
+    logger.debug('Filter left over peptide pairs')
     df_pep = df_pep.with_columns(
         base_protein_p1 = (
             col('protein_p1')
@@ -176,7 +179,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     )
 
     # Calculate link FDR and cutoff
-    print('Calculate link FDR and cutoff')
+    logger.debug('Calculate link FDR and cutoff')
     link_cols = pep_cols.copy()
     link_cols.remove('sequence_p1')
     link_cols.remove('sequence_p2')
@@ -197,7 +200,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     df_link = df_link.filter(col('link_fdr') <= link_fdr)
 
     # Calculate PPI FDR
-    print('Calculate PPI FDR')
+    logger.debug('Calculate PPI FDR')
     ppi_cols = link_cols.copy()
     ppi_cols.remove('cl_pos_p1')
     ppi_cols.remove('cl_pos_p2')
