@@ -19,7 +19,7 @@ def boost(df: pl.DataFrame,
           ppi_fdr: (float, float) = (0.0, 1.0),
           boost_level: str = "ppi",
           boost_between: bool = True,
-          method: str = "brute",
+          method: str = "manhattan",
           points: int = 5,
           n_jobs: int = 1):
     if method == 'brute':
