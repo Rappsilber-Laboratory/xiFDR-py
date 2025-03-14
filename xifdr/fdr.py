@@ -205,7 +205,20 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     ppi_cols.remove('cl_pos_p1')
     ppi_cols.remove('cl_pos_p2')
     ppi_merge_cols = [c for c in df_link.columns if c not in ppi_cols+never_agg_cols]
-    df_ppi = df_link.group_by(ppi_cols).agg(
+    df_ppi = df_link.with_columns(
+        protein_p1=col('protein_p1').list.unique().list.sort(),
+        protein_p2=col('protein_p2').list.unique().list.sort(),
+    ).with_columns(
+        **{  # Swap proteins again after unique
+            c1: pl.when(col('protein_p1') > col('protein_p2')).then(c2).otherwise(c1)
+            for c1, c2 in zip(
+                [c for c in df_link.columns if c.endswith('_p1')] +  # Swap _p1 with _p2
+                [c for c in df_link.columns if c.endswith('_p2')],   # Swap _p2 with _p1s
+                [c for c in df_link.columns if c.endswith('_p2')] +  # Swap _p1 with _p2
+                [c for c in df_link.columns if c.endswith('_p1')],   # Swap _p2 with _p1
+            )
+        },
+    ).group_by(ppi_cols).agg(
         (col('score')**2).sum().sqrt(),
         *first_aggs,
         *[
