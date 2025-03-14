@@ -210,7 +210,9 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         protein_p2=col('protein_p2').list.unique().list.sort(),
     ).with_columns(
         **{  # Swap proteins again after unique
-            c1: pl.when(col('protein_p1') > col('protein_p2')).then(c2).otherwise(c1)
+            c1: pl.when(
+                col('protein_p1').list.join(';') > col('protein_p2').list.join(';')
+            ).then(c2).otherwise(c1)
             for c1, c2 in zip(
                 [c for c in df_link.columns if c.endswith('_p1')] +  # Swap _p1 with _p2
                 [c for c in df_link.columns if c.endswith('_p2')],   # Swap _p2 with _p1s
