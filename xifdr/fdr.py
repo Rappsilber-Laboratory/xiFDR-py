@@ -65,7 +65,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     # Calculate PSM FDR and cutoff
     logger.debug('Calculate PSM FDR and cutoff')
     df_psm = df_psm.with_columns(
-        psm_fdr = single_bi_fdr(df_psm)
+        psm_fdr = single_grouped_fdr(df_psm)
     )
     df_psm = df_psm.filter(col('psm_fdr') <= psm_fdr)
 
@@ -85,13 +85,13 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         ]
     )
     df_pep = df_pep.with_columns(
-        pep_fdr = single_bi_fdr(df_pep)
+        pep_fdr = single_grouped_fdr(df_pep)
     )
     df_pep = df_pep.filter(col('pep_fdr') <= pep_fdr)
 
     # Construct protein (group) DF
     df_prot_p1 = df_pep.select([
-        'protein_p1', 'protein_score_p1', 'decoy_p1'
+        'protein_p1', 'protein_score_p1', 'decoy_p1', 'fdr_group'
     ]).rename({
         'protein_p1': 'protein',
         'protein_score_p1': 'score',
@@ -99,7 +99,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     })
 
     df_prot_p2 = df_pep.select([
-        'protein_p2', 'protein_score_p2', 'decoy_p2'
+        'protein_p2', 'protein_score_p2', 'decoy_p2', 'fdr_group'
     ]).rename({
         'protein_p2': 'protein',
         'protein_score_p2': 'score',
@@ -117,19 +117,31 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     )
     df_prot = df_prot.group_by(['protein_group', 'decoy']).agg(
         (col('score')**2).sum().sqrt(),
-        col('protein')
+        col('protein'),
+        col('fdr_group'),
+    ).with_columns(
+        no_self = ~pl.lit('self').is_in(col('fdr_group')),
+        no_linear = ~pl.lit('linear').is_in(col('fdr_group')),
+        between = pl.lit('between').is_in(col('fdr_group')),
+    ).with_columns(
+        protein_fdr_group = (
+            pl.when(col('between') & col('no_self') & col('no_linear'))
+              .then(pl.lit('unsupported_between'))
+              .when(col('between'))
+              .then(pl.lit('supported_between'))
+              .otherwise(pl.lit('self_or_linear'))
+        )
     )
     df_prot = df_prot.with_columns(
-        DD = col('decoy'),
+        TD = col('decoy'),
         TT = ~col('decoy'),
-        TD = pl.lit(False)  # Abuse CL-FDR for linear case
+        DD = pl.lit(False)  # Abuse CL-FDR for linear case
     )
     df_prot = df_prot.with_columns(
-        prot_fdr = single_fdr(df_prot)
+        prot_fdr = single_grouped_fdr(df_prot, fdr_group_col='protein_fdr_group')
     )
-    df_prot = df_prot.filter(col('prot_fdr') <= prot_fdr)
 
-    passed_prots = df_prot['protein'].explode()
+    passed_prots = df_prot.filter(col('prot_fdr') <= prot_fdr)['protein'].explode()
     passed_prots = passed_prots.list.join(';')
     passed_prots = passed_prots.str.replace_all(decoy_adjunct, '')
     passed_prots = passed_prots.str.split(';')
@@ -195,7 +207,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         ]
     )
     df_link = df_link.with_columns(
-        link_fdr = single_bi_fdr(df_link)
+        link_fdr = single_grouped_fdr(df_link)
     )
     df_link = df_link.filter(col('link_fdr') <= link_fdr)
 
@@ -229,7 +241,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         ]
     )
     df_ppi = df_ppi.with_columns(
-        ppi_fdr = single_bi_fdr(df_ppi)
+        ppi_fdr = single_grouped_fdr(df_ppi)
     )
     df_ppi = df_ppi.filter(col('ppi_fdr') <= ppi_fdr)
 
@@ -260,7 +272,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     }
 
 
-def single_bi_fdr(df: pl.DataFrame | pd.DataFrame) -> pl.Series:
+def single_grouped_fdr(df: pl.DataFrame | pd.DataFrame, fdr_group_col: str = "fdr_group") -> pl.Series:
     """
     Computes the false discovery rate (FDR) for a given DF.
 
@@ -288,9 +300,10 @@ def single_bi_fdr(df: pl.DataFrame | pd.DataFrame) -> pl.Series:
     fdr_with_order = fdr_with_order.with_columns(
         fdr = pl.lit(0.0)
     )
-    for dclass in ['self', 'between', 'linear']:
+    fdr_groups = df[fdr_group_col].unique().to_list()
+    for fdr_group in fdr_groups:
         class_df = df.filter(
-            col('fdr_group') == dclass
+            col(fdr_group_col) == fdr_group
         )
         class_df = class_df.with_columns(
             single_fdr(class_df)
