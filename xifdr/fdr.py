@@ -176,17 +176,17 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         ),
     )
 
-    df_pep.join(
+    df_pep = df_pep.join(
         passed_prots.to_frame(),
         left_on=['base_protein_p1'],
         right_on=['passed_prots'],
-        how='left',
+        how='inner',
         suffix='p1'
     ).join(
         passed_prots.to_frame(),
         left_on=['base_protein_p2'],
         right_on=['passed_prots'],
-        how='left',
+        how='inner',
         suffix='p2'
     )
 
