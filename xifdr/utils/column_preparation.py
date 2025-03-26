@@ -4,6 +4,34 @@ from .double_argsort_batch import double_argsort_batch
 
 
 def prepare_columns(df):
+    """Prepares and processes a Polars DataFrame for protein-protein interaction analysis.
+
+    This function ensures the proper format of protein columns, calculates crosslink positions,
+    sorts protein lists, swaps peptides based on predefined criteria, and computes various scores
+    and classification labels.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+        A Polars DataFrame containing protein interaction data. If not already a Polars DataFrame,
+        it will be converted.
+
+    Returns
+    -------
+    pl.DataFrame
+        The processed DataFrame with formatted columns, calculated positions, sorted lists,
+        swapped peptides, and additional computed fields.
+
+    Notes
+    -----
+    - Converts semicolon-separated protein columns into lists.
+    - Computes crosslink positions by adjusting start positions.
+    - Sorts list columns based on protein group and start position order.
+    - Swaps peptides based on a custom string comparison mask.
+    - Computes one-hot encoded labels (`TT`, `TD`, `DD`) for classification.
+    - Ensures a positive score and assigns dummy coverage values if missing.
+    - Computes proportional protein scores based on coverage.
+    """
     if not isinstance(df, pl.DataFrame):
         df: pl.DataFrame = pl.DataFrame(df)
 
@@ -21,42 +49,55 @@ def prepare_columns(df):
                 col(c).cast(pl.String).str.split(';')
             )
 
+    # Create decoy_class column if not present
+    if 'decoy_class' not in df.columns:
+        df = df.with_columns(
+            decoy_class=pl.when(
+                col('decoy_p1') & col('decoy_p2')
+            ).then(
+                pl.lit('DD')
+            ).when(
+                col('decoy_p1').not_() & col('decoy_p2').not_()
+            ).then(
+                pl.lit('TT')
+            ).otherwise(
+                pl.lit('TD')
+            )
+        )
+
+    # Sort list columns by protein group order
+    start_rank_p1 = pl.col('start_pos_p1').list.eval(pl.element().rank(method="dense"))
+    start_rank_p2 = pl.col('start_pos_p2').list.eval(pl.element().rank(method="dense"))
+    prot_rank_p1 = pl.col('protein_p1').list.eval(pl.element().rank(method="dense"))
+    prot_rank_p2 = pl.col('protein_p2').list.eval(pl.element().rank(method="dense"))
+    group_p1_rank = (
+        prot_rank_p1 * start_rank_p1.list.max().add(1) + start_rank_p1
+    )
+    group_p2_rank = (
+        prot_rank_p2 * start_rank_p2.list.max().add(1) + start_rank_p2
+    )
+    df = df.with_columns(
+        col('protein_p2').fill_null([]),
+        col('start_pos_p2').fill_null([]),
+    )
+
+    df = df.with_columns(
+        [
+            col(c).list.gather(group_p1_rank.list.eval(pl.element().arg_sort()))
+            for c in list_cols_1
+        ]
+    ).with_columns(
+        [
+            col(c).list.gather(group_p2_rank.list.eval(pl.element().arg_sort()))
+            for c in list_cols_2
+        ]
+    )
+
     # Calculate crosslink position in protein
     df = df.with_columns(
         cl_pos_p1 = col('start_pos_p1').cast(pl.List(pl.Int64)) + col('link_pos_p1') - 1,
         cl_pos_p2 = col('start_pos_p2').cast(pl.List(pl.Int64)) + col('link_pos_p2') - 1,
     )
-
-    # Sort list columns by protein group order
-    protein_p1_ord = pl.struct(["protein_p1", "start_pos_p1"]).map_batches(
-        lambda x: pl.Series(double_argsort_batch(
-            x.struct.field('protein_p1').to_list(),
-            x.struct.field('start_pos_p1').to_list()
-        ))
-    )
-    protein_p2_ord = pl.struct(["protein_p2", "start_pos_p2"]).map_batches(
-        lambda x: pl.Series(double_argsort_batch(
-            x.struct.field('protein_p2').to_list(),
-            x.struct.field('start_pos_p2').to_list()
-        ))
-    )
-    df = df.with_columns(
-        protein_p1_ord = protein_p1_ord
-    )
-    df = df.with_columns(
-        col('protein_p2').fill_null([])
-    ).with_columns(
-        protein_p2_ord = protein_p2_ord
-    )
-
-    for c in list_cols_1:
-        df = df.with_columns(
-            col(c).list.gather(col('protein_p1_ord'))
-        )
-    for c in list_cols_2:
-        df = df.with_columns(
-            col(c).list.gather(col('protein_p2_ord'))
-        )
 
     # Swap peptides based on joined protein group
     protein_p1_str = col('protein_p1').list.join(';')
@@ -122,7 +163,7 @@ def prepare_columns(df):
     )
 
     # Make score positive
-    df.with_columns(col('score') + col('score').min())
+    df = df.with_columns(col('score') - col('score').min())
 
     # Put in dummy coverage if none provided
     if 'coverage_p1' not in df.columns or 'coverage_p2' not in df.columns:
