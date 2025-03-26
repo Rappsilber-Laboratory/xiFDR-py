@@ -1,6 +1,5 @@
 import polars as pl
 from polars import col
-from .double_argsort_batch import double_argsort_batch
 
 
 def prepare_columns(df):
