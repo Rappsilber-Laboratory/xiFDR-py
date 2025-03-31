@@ -280,6 +280,8 @@ def single_grouped_fdr(df: pl.DataFrame | pd.DataFrame, fdr_group_col: str = "fd
     ----------
     df : pl.DataFrame | pd.DataFrame
         The input DF containing columns for TT, TD, DD, decoy_class and score.
+    fdr_group_col : str
+        The column name for grouping
 
     Returns
     -------
