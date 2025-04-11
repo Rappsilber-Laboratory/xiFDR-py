@@ -18,7 +18,17 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
              decoy_adjunct:str = 'REV_',
              unique_psm: bool = True,
              filter_back:bool = True,
-             prepare_column:bool = True):
+             prepare_column:bool = True,
+             custom_aggs:dict = None):
+    aggs = {
+        'pep': (col('score')**2).sum().sqrt(),
+        'prot': (col('score')**2).sum().sqrt(),
+        'link': (col('score')**2).sum().sqrt(),
+        'ppi': (col('score')**2).sum().sqrt(),
+    }
+    if custom_aggs is not None:
+        aggs.update(custom_aggs)
+
     if prepare_column:
         df = prepare_columns(df)
 
@@ -75,14 +85,14 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     pep_cols.remove('charge')
     pep_merge_cols = [c for c in df_psm.columns if c not in pep_cols+never_agg_cols]
     df_pep = df_psm.group_by(pep_cols).agg(
-        (col('score')**2).sum().sqrt(),
         (col('protein_score_p1')**2).sum().sqrt(),
         (col('protein_score_p2')**2).sum().sqrt(),
         *first_aggs,
         *[
             col(c).flatten()
             for c in pep_merge_cols
-        ]
+        ],
+        score=aggs['pep']
     )
     df_pep = df_pep.with_columns(
         pep_fdr = single_grouped_fdr(df_pep)
@@ -116,9 +126,9 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         protein_group = col('protein').list.unique()
     )
     df_prot = df_prot.group_by(['protein_group', 'decoy']).agg(
-        (col('score')**2).sum().sqrt(),
         col('protein'),
         col('fdr_group'),
+        score=aggs['prot']
     ).with_columns(
         no_self = ~pl.lit('self').is_in(col('fdr_group')),
         no_linear = ~pl.lit('linear').is_in(col('fdr_group')),
@@ -199,12 +209,12 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     df_link = df_pep.filter(
         col('fdr_group') != "linear" # Disregard linear peptides from here on
     ).group_by(link_cols).agg(
-        (col('score')**2).sum().sqrt(),
         *first_aggs,
         *[
             col(c).flatten()
             for c in link_merge_cols
-        ]
+        ],
+        score=aggs['link']
     )
     df_link = df_link.with_columns(
         link_fdr = single_grouped_fdr(df_link)
@@ -233,12 +243,12 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
             )
         },
     ).group_by(ppi_cols).agg(
-        (col('score')**2).sum().sqrt(),
         *first_aggs,
         *[
             col(c).flatten()
             for c in ppi_merge_cols
-        ]
+        ],
+        score=aggs['ppi']
     )
     df_ppi = df_ppi.with_columns(
         ppi_fdr = single_grouped_fdr(df_ppi)
