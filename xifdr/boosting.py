@@ -12,7 +12,7 @@ from .optimization import manhattan, independent_gird
 logger = logging.getLogger(__name__)
 
 def boost(df: pl.DataFrame,
-          psm_fdr: (float, float) = (0.0, 1.0),
+          csm_fdr: (float, float) = (0.0, 1.0),
           pep_fdr: (float, float) = (0.0, 1.0),
           prot_fdr: (float, float) = (0.0, 1.0),
           link_fdr: (float, float) = (0.0, 1.0),
@@ -21,11 +21,43 @@ def boost(df: pl.DataFrame,
           boost_between: bool = True,
           method: str = "manhattan",
           points: int = 5,
-          n_jobs: int = 1):
+          n_jobs: int = 1) -> (float, float, float, float, float):
+    """
+    Find the best FDR cutoffs to optimize results for a certain FDR level.
+
+    Parameters
+    ----------
+    df
+        CSM DataFrame
+    csm_fdr
+        Search range for CSM FDR level cutoff
+    pep_fdr
+        Search range for peptide FDR level cutoff
+    prot_fdr
+        Search range for protein FDR level cutoff
+    link_fdr
+        Search range for residue link FDR level cutoff
+    ppi_fdr
+        Search range for protein pair FDR level cutoff
+    boost_level
+        FDR level tp boost for
+    boost_between
+        Whether to boost for between links
+    method
+        Search algorithm to use
+    points
+        Number of FDR cutoffs to search in one iteration
+    n_jobs
+        Number of threads to use
+
+    Returns
+    -------
+        Returns a tuple with the optimal FDR levels.
+    """
     if method == 'brute':
         return boost_rec_brute(
             df=df,
-            psm_fdr=psm_fdr,
+            csm_fdr=csm_fdr,
             pep_fdr=pep_fdr,
             prot_fdr=prot_fdr,
             link_fdr=link_fdr,
@@ -37,7 +69,7 @@ def boost(df: pl.DataFrame,
     elif method == 'manhattan':
         return boost_manhattan(
             df=df,
-            psm_fdr=psm_fdr,
+            csm_fdr=csm_fdr,
             pep_fdr=pep_fdr,
             prot_fdr=prot_fdr,
             link_fdr=link_fdr,
@@ -50,7 +82,7 @@ def boost(df: pl.DataFrame,
     elif method == 'independent_grid':
         return boost_independent_grid(
             df=df,
-            psm_fdr=psm_fdr,
+            csm_fdr=csm_fdr,
             pep_fdr=pep_fdr,
             prot_fdr=prot_fdr,
             link_fdr=link_fdr,
@@ -64,7 +96,7 @@ def boost(df: pl.DataFrame,
         raise ValueError(f'Unkown boosting method: {method}')
 
 def boost_manhattan(df: pl.DataFrame,
-                    psm_fdr: (float, float) = (0.0, 1.0),
+                    csm_fdr: (float, float) = (0.0, 1.0),
                     pep_fdr: (float, float) = (0.0, 1.0),
                     prot_fdr: (float, float) = (0.0, 1.0),
                     link_fdr: (float, float) = (0.0, 1.0),
@@ -75,7 +107,7 @@ def boost_manhattan(df: pl.DataFrame,
                     n_jobs: int = 1):
     df = prepare_columns(df)
     start_params = (
-        psm_fdr,
+        csm_fdr,
         pep_fdr,
         prot_fdr,
         link_fdr,
@@ -97,7 +129,7 @@ def boost_manhattan(df: pl.DataFrame,
 
 
 def boost_independent_grid(df: pl.DataFrame,
-                    psm_fdr: (float, float) = (0.0, 1.0),
+                    csm_fdr: (float, float) = (0.0, 1.0),
                     pep_fdr: (float, float) = (0.0, 1.0),
                     prot_fdr: (float, float) = (0.0, 1.0),
                     link_fdr: (float, float) = (0.0, 1.0),
@@ -108,7 +140,7 @@ def boost_independent_grid(df: pl.DataFrame,
                     n_jobs: int = 1):
     df = prepare_columns(df)
     start_params = (
-        psm_fdr,
+        csm_fdr,
         pep_fdr,
         prot_fdr,
         link_fdr,
@@ -130,7 +162,7 @@ def boost_independent_grid(df: pl.DataFrame,
 
 
 def boost_rec_brute(df: pl.DataFrame,
-                    psm_fdr: (float, float) = (0.0, 1.0),
+                    csm_fdr: (float, float) = (0.0, 1.0),
                     pep_fdr: (float, float) = (0.0, 1.0),
                     prot_fdr: (float, float) = (0.0, 1.0),
                     link_fdr: (float, float) = (0.0, 1.0),
@@ -141,7 +173,7 @@ def boost_rec_brute(df: pl.DataFrame,
                     n_jobs: int = 1):
     df = prepare_columns(df)
     start_params = (
-        psm_fdr,
+        csm_fdr,
         pep_fdr,
         prot_fdr,
         link_fdr,

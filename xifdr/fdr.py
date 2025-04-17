@@ -2,29 +2,58 @@ import typing
 import logging
 import pandas as pd
 import polars as pl
-import cython
-from polars import col
 from xifdr.utils.column_preparation import prepare_columns
 
 
 logger = logging.getLogger(__name__)
 
 def full_fdr(df: pl.DataFrame | pd.DataFrame,
-             psm_fdr:float = 1.0,
+             cms_fdr:float = 1.0,
              pep_fdr:float = 1.0,
              prot_fdr:float = 1.0,
              link_fdr:float = 1.0,
              ppi_fdr:float = 1.0,
              decoy_adjunct:str = 'REV_',
-             unique_psm: bool = True,
+             unique_cms: bool = True,
              filter_back:bool = True,
              prepare_column:bool = True,
-             custom_aggs:dict = None):
+             custom_aggs:dict = None) -> dict[str, pl.DataFrame]:
+    """
+    
+    Parameters
+    ----------
+    df
+        Input CSM dataframe
+    cms_fdr
+        CSM level FDR cutoff
+    pep_fdr
+        Peptide level FDR cutoff
+    prot_fdr
+        Protein level FDR cutoff
+    link_fdr
+        Link level FDR cutoff
+    ppi_fdr
+        Protein pair level FDR cutoff
+    decoy_adjunct
+        Prefix/Suffix indicating a decoy match
+    unique_cms
+        Make CSMs unique
+    filter_back
+        Filter lower levels to include only matches that also pass on higher levels
+    prepare_column
+        Perform preparation of aggregation columns like sorting ambiguous proteins and swapping protein 1/2
+    custom_aggs
+        Custom aggregation functions for the FDR levels
+
+    Returns
+    -------
+        Return a dict with keys `'csm'`, `'pep'`, `'prot'`, `'link'`, `'ppi'` that contains the resulting polars DataFrame for each FDR level.
+    """
     aggs = {
-        'pep': (col('score')**2).sum().sqrt(),
-        'prot': (col('score')**2).sum().sqrt(),
-        'link': (col('score')**2).sum().sqrt(),
-        'ppi': (col('score')**2).sum().sqrt(),
+        'pep': (pl.col('score')**2).sum().sqrt(),
+        'prot': (pl.col('score')**2).sum().sqrt(),
+        'link': (pl.col('score')**2).sum().sqrt(),
+        'ppi': (pl.col('score')**2).sum().sqrt(),
     }
     if custom_aggs is not None:
         aggs.update(custom_aggs)
@@ -51,43 +80,43 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     if len(missing_columns) > 0:
         raise Exception(f'Missing required columns: {missing_columns}')
 
-    # Aggregate unique PSMs
+    # Aggregate unique CSMs
     never_agg_cols = ['fdr_group', 'decoy_class', 'TT', 'TD', 'DD']
     first_aggs = [
-        col(c).get(0)
+        pl.col(c).get(0)
         for c in never_agg_cols
     ]
     never_agg_cols += ['score', 'protein_score_p1', 'protein_score_p2']
 
-    psm_cols = required_columns.copy()
-    psm_cols.remove('score')
-    psm_cols.remove('start_pos_p1')
-    psm_cols.remove('start_pos_p2')
-    psm_cols.remove('link_pos_p1')
-    psm_cols.remove('link_pos_p2')
-    psm_cols += ['cl_pos_p1', 'cl_pos_p2']
+    cms_cols = required_columns.copy()
+    cms_cols.remove('score')
+    cms_cols.remove('start_pos_p1')
+    cms_cols.remove('start_pos_p2')
+    cms_cols.remove('link_pos_p1')
+    cms_cols.remove('link_pos_p2')
+    cms_cols += ['cl_pos_p1', 'cl_pos_p2']
 
-    if unique_psm:
-        df_psm = df.sort('score', descending=True).unique(subset=psm_cols, keep='first')
+    if unique_cms:
+        df_cms = df.sort('score', descending=True).unique(subset=cms_cols, keep='first')
     else:
-        df_psm = df
+        df_cms = df
 
-    # Calculate PSM FDR and cutoff
-    logger.debug('Calculate PSM FDR and cutoff')
-    df_psm = df_psm.with_columns(
-        psm_fdr = single_grouped_fdr(df_psm)
+    # Calculate CSM FDR and cutoff
+    logger.debug('Calculate CSM FDR and cutoff')
+    df_cms = df_cms.with_columns(
+        cms_fdr = single_grouped_fdr(df_cms)
     )
-    df_psm = df_psm.filter(col('psm_fdr') <= psm_fdr)
+    df_cms = df_cms.filter(pl.col('cms_fdr') <= cms_fdr)
 
     # Calculate peptide FDR and filter
     logger.debug('Calculate peptide FDR and filter')
-    pep_cols = psm_cols.copy()
+    pep_cols = cms_cols.copy()
     pep_cols.remove('charge')
-    pep_merge_cols = [c for c in df_psm.columns if c not in pep_cols+never_agg_cols]
-    df_pep = df_psm.group_by(pep_cols).agg(
+    pep_merge_cols = [c for c in df_cms.columns if c not in pep_cols+never_agg_cols]
+    df_pep = df_cms.group_by(pep_cols).agg(
         *first_aggs,
         *[
-            col(c).flatten()
+            pl.col(c).flatten()
             for c in pep_merge_cols
         ],
         protein_score_p1=aggs['pep'].name.map(lambda _: 'protein_score_p1'),
@@ -97,7 +126,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     df_pep = df_pep.with_columns(
         pep_fdr = single_grouped_fdr(df_pep)
     )
-    df_pep = df_pep.filter(col('pep_fdr') <= pep_fdr)
+    df_pep = df_pep.filter(pl.col('pep_fdr') <= pep_fdr)
 
     # Construct protein (group) DF
     df_prot_p1 = df_pep.select([
@@ -123,35 +152,35 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         df_prot_p2
     ])
     df_prot = df_prot.with_columns(
-        protein_group = col('protein').list.unique()
+        protein_group = pl.col('protein').list.unique()
     )
     df_prot = df_prot.group_by(['protein_group', 'decoy']).agg(
-        col('protein'),
-        col('fdr_group'),
+        pl.col('protein'),
+        pl.col('fdr_group'),
         score=aggs['prot']
     ).with_columns(
-        no_self = ~pl.lit('self').is_in(col('fdr_group')),
-        no_linear = ~pl.lit('linear').is_in(col('fdr_group')),
-        between = pl.lit('between').is_in(col('fdr_group')),
+        no_self = ~pl.lit('self').is_in(pl.col('fdr_group')),
+        no_linear = ~pl.lit('linear').is_in(pl.col('fdr_group')),
+        between = pl.lit('between').is_in(pl.col('fdr_group')),
     ).with_columns(
         protein_fdr_group = (
-            pl.when(col('between') & col('no_self') & col('no_linear'))
+            pl.when(pl.col('between') & pl.col('no_self') & pl.col('no_linear'))
               .then(pl.lit('unsupported_between'))
-              .when(col('between'))
+              .when(pl.col('between'))
               .then(pl.lit('supported_between'))
               .otherwise(pl.lit('self_or_linear'))
         )
     )
     df_prot = df_prot.with_columns(
-        TD = col('decoy'),
-        TT = ~col('decoy'),
+        TD = pl.col('decoy'),
+        TT = ~pl.col('decoy'),
         DD = pl.lit(False)  # Abuse CL-FDR for linear case
     )
     df_prot = df_prot.with_columns(
         prot_fdr = single_grouped_fdr(df_prot, fdr_group_col='protein_fdr_group')
     )
 
-    passed_prots = df_prot.filter(col('prot_fdr') <= prot_fdr)['protein'].explode()
+    passed_prots = df_prot.filter(pl.col('prot_fdr') <= prot_fdr)['protein'].explode()
     passed_prots = passed_prots.list.join(';')
     passed_prots = passed_prots.str.replace_all(decoy_adjunct, '')
     passed_prots = passed_prots.str.split(';')
@@ -163,7 +192,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     logger.debug('Filter left over peptide pairs')
     df_pep = df_pep.with_columns(
         base_protein_p1 = (
-            col('protein_p1')
+            pl.col('protein_p1')
                 # Replace decoy_adjunct
                 .list.join(';')
                 .str.replace_all(decoy_adjunct, '')
@@ -174,7 +203,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
                 .list.join(';')
         ),
         base_protein_p2 = (
-            col('protein_p2')
+            pl.col('protein_p2')
                 # Replace decoy_adjunct
                 .list.join(';')
                 .str.replace_all(decoy_adjunct, '')
@@ -207,11 +236,11 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     link_cols.remove('sequence_p2')
     link_merge_cols = [c for c in df_pep.columns if c not in link_cols+never_agg_cols]
     df_link = df_pep.filter(
-        col('fdr_group') != "linear" # Disregard linear peptides from here on
+        pl.col('fdr_group') != "linear" # Disregard linear peptides from here on
     ).group_by(link_cols).agg(
         *first_aggs,
         *[
-            col(c).flatten()
+            pl.col(c).flatten()
             for c in link_merge_cols
         ],
         score=aggs['link']
@@ -219,7 +248,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     df_link = df_link.with_columns(
         link_fdr = single_grouped_fdr(df_link)
     )
-    df_link = df_link.filter(col('link_fdr') <= link_fdr)
+    df_link = df_link.filter(pl.col('link_fdr') <= link_fdr)
 
     # Calculate PPI FDR
     logger.debug('Calculate PPI FDR')
@@ -228,12 +257,12 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     ppi_cols.remove('cl_pos_p2')
     ppi_merge_cols = [c for c in df_link.columns if c not in ppi_cols+never_agg_cols]
     df_ppi = df_link.with_columns(
-        protein_p1=col('protein_p1').list.unique().list.sort(),
-        protein_p2=col('protein_p2').list.unique().list.sort(),
+        protein_p1=pl.col('protein_p1').list.unique().list.sort(),
+        protein_p2=pl.col('protein_p2').list.unique().list.sort(),
     ).with_columns(
         **{  # Swap proteins again after unique
             c1: pl.when(
-                col('protein_p1').list.join(';') > col('protein_p2').list.join(';')
+                pl.col('protein_p1').list.join(';') > pl.col('protein_p2').list.join(';')
             ).then(c2).otherwise(c1)
             for c1, c2 in zip(
                 [c for c in df_link.columns if c.endswith('_p1')] +  # Swap _p1 with _p2
@@ -245,7 +274,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     ).group_by(ppi_cols).agg(
         *first_aggs,
         *[
-            col(c).flatten()
+            pl.col(c).flatten()
             for c in ppi_merge_cols
         ],
         score=aggs['ppi']
@@ -253,7 +282,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     df_ppi = df_ppi.with_columns(
         ppi_fdr = single_grouped_fdr(df_ppi)
     )
-    df_ppi = df_ppi.filter(col('ppi_fdr') <= ppi_fdr)
+    df_ppi = df_ppi.filter(pl.col('ppi_fdr') <= ppi_fdr)
 
     # Back-fitler levels
     if filter_back:
@@ -267,14 +296,14 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
             on=link_cols,
             how='left'
         )
-        df_psm = df_psm.join(
+        df_cms = df_cms.join(
             df_pep.select(pep_cols),
             on=pep_cols,
             how='left'
         )
 
     return {
-        'psm': df_psm,
+        'cms': df_cms,
         'pep': df_pep,
         'prot': df_prot,
         'link': df_link,
@@ -315,7 +344,7 @@ def single_grouped_fdr(df: pl.DataFrame | pd.DataFrame, fdr_group_col: str = "fd
     fdr_groups = df[fdr_group_col].unique().to_list()
     for fdr_group in fdr_groups:
         class_df = df.filter(
-            col(fdr_group_col) == fdr_group
+            pl.col(fdr_group_col) == fdr_group
         )
         class_df = class_df.with_columns(
             single_fdr(class_df)
@@ -346,10 +375,3 @@ def single_fdr(df: pl.DataFrame | pd.DataFrame) -> pl.Series:
         fdr = fdr_raw.reverse().cum_min().reverse()
     )
     return working_df.sort(order_col)['fdr']
-
-@cython.cfunc
-@cython.boundscheck(False)
-@cython.wraparound(False)
-def _str_zip(protein_list: typing.List[str],
-                 pos_list: typing.List[str]) -> typing.List[str]:
-    return [f'{a};{b}' for a,b in zip(protein_list, pos_list)]

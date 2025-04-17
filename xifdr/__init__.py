@@ -1,3 +1,5 @@
+from . import boosting
+from . import fdr
 import setuptools_scm
 
 def get_version():
