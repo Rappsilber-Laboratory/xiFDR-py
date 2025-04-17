@@ -85,13 +85,13 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     pep_cols.remove('charge')
     pep_merge_cols = [c for c in df_psm.columns if c not in pep_cols+never_agg_cols]
     df_pep = df_psm.group_by(pep_cols).agg(
-        (col('protein_score_p1')**2).sum().sqrt(),
-        (col('protein_score_p2')**2).sum().sqrt(),
         *first_aggs,
         *[
             col(c).flatten()
             for c in pep_merge_cols
         ],
+        protein_score_p1=aggs['pep'].name.map(lambda _: 'protein_score_p1'),
+        protein_score_p2=aggs['pep'].name.map(lambda _: 'protein_score_p2'),
         score=aggs['pep']
     )
     df_pep = df_pep.with_columns(
