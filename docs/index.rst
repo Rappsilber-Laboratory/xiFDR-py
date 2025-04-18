@@ -20,4 +20,6 @@ or PPIs by finding the optimal FDR thresholds.
    :maxdepth: 2
    :caption: Contents:
 
+   basic_usage
+   how_it_works
    api
