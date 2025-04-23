@@ -3,6 +3,7 @@ import logging
 import pandas as pd
 import polars as pl
 from xifdr.utils.column_preparation import prepare_columns
+from xifdr.utils import expression_utils
 
 
 logger = logging.getLogger(__name__)
@@ -119,8 +120,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
             pl.col(c).flatten()
             for c in pep_merge_cols
         ],
-        protein_score_p1=aggs['pep'].name.map(lambda _: 'protein_score_p1'),
-        protein_score_p2=aggs['pep'].name.map(lambda _: 'protein_score_p2'),
+        protein_score_p1=expression_utils.replace_input(aggs['pep'], 'protein_score_p1'),
+        protein_score_p2=expression_utils.replace_input(aggs['pep'], 'protein_score_p2'),
         score=aggs['pep']
     )
     df_pep = df_pep.with_columns(

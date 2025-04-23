@@ -130,9 +130,7 @@ def test_single_fdr_monotone():
 
 
 def test_full_fdr():
-    samples = pl.read_parquet('../samples_data.parquet')
-    #x = full_fdr(samples)
-    #pass
+    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
     x = full_fdr(
         samples,
         csm_fdr=0.5,
@@ -145,7 +143,7 @@ def test_full_fdr():
 
 
 def test_boosting():
-    samples = pl.read_parquet('../samples_data.parquet')
+    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
     fdrs = boost(
         samples,
         link_fdr=(0, 0.05),
