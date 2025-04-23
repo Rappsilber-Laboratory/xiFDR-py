@@ -135,7 +135,7 @@ def test_full_fdr():
     #pass
     x = full_fdr(
         samples,
-        psm_fdr=0.5,
+        csm_fdr=0.5,
         pep_fdr=0.5,
         prot_fdr=0.3,
         link_fdr=0.05,

@@ -8,13 +8,13 @@ from xifdr.utils.column_preparation import prepare_columns
 logger = logging.getLogger(__name__)
 
 def full_fdr(df: pl.DataFrame | pd.DataFrame,
-             cms_fdr:float = 1.0,
+             csm_fdr:float = 1.0,
              pep_fdr:float = 1.0,
              prot_fdr:float = 1.0,
              link_fdr:float = 1.0,
              ppi_fdr:float = 1.0,
              decoy_adjunct:str = 'REV_',
-             unique_cms: bool = True,
+             unique_csm: bool = True,
              filter_back:bool = True,
              prepare_column:bool = True,
              custom_aggs:dict = None) -> dict[str, pl.DataFrame]:
@@ -24,7 +24,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     ----------
     df
         Input CSM dataframe
-    cms_fdr
+    csm_fdr
         CSM level FDR cutoff
     pep_fdr
         Peptide level FDR cutoff
@@ -36,7 +36,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         Protein pair level FDR cutoff
     decoy_adjunct
         Prefix/Suffix indicating a decoy match
-    unique_cms
+    unique_csm
         Make CSMs unique
     filter_back
         Filter lower levels to include only matches that also pass on higher levels
@@ -88,32 +88,32 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     ]
     never_agg_cols += ['score', 'protein_score_p1', 'protein_score_p2']
 
-    cms_cols = required_columns.copy()
-    cms_cols.remove('score')
-    cms_cols.remove('start_pos_p1')
-    cms_cols.remove('start_pos_p2')
-    cms_cols.remove('link_pos_p1')
-    cms_cols.remove('link_pos_p2')
-    cms_cols += ['cl_pos_p1', 'cl_pos_p2']
+    csm_cols = required_columns.copy()
+    csm_cols.remove('score')
+    csm_cols.remove('start_pos_p1')
+    csm_cols.remove('start_pos_p2')
+    csm_cols.remove('link_pos_p1')
+    csm_cols.remove('link_pos_p2')
+    csm_cols += ['cl_pos_p1', 'cl_pos_p2']
 
-    if unique_cms:
-        df_cms = df.sort('score', descending=True).unique(subset=cms_cols, keep='first')
+    if unique_csm:
+        df_csm = df.sort('score', descending=True).unique(subset=csm_cols, keep='first')
     else:
-        df_cms = df
+        df_csm = df
 
     # Calculate CSM FDR and cutoff
     logger.debug('Calculate CSM FDR and cutoff')
-    df_cms = df_cms.with_columns(
-        cms_fdr = single_grouped_fdr(df_cms)
+    df_csm = df_csm.with_columns(
+        csm_fdr = single_grouped_fdr(df_csm)
     )
-    df_cms = df_cms.filter(pl.col('cms_fdr') <= cms_fdr)
+    df_csm = df_csm.filter(pl.col('csm_fdr') <= csm_fdr)
 
     # Calculate peptide FDR and filter
     logger.debug('Calculate peptide FDR and filter')
-    pep_cols = cms_cols.copy()
+    pep_cols = csm_cols.copy()
     pep_cols.remove('charge')
-    pep_merge_cols = [c for c in df_cms.columns if c not in pep_cols+never_agg_cols]
-    df_pep = df_cms.group_by(pep_cols).agg(
+    pep_merge_cols = [c for c in df_csm.columns if c not in pep_cols+never_agg_cols]
+    df_pep = df_csm.group_by(pep_cols).agg(
         *first_aggs,
         *[
             pl.col(c).flatten()
@@ -296,14 +296,14 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
             on=link_cols,
             how='left'
         )
-        df_cms = df_cms.join(
+        df_csm = df_csm.join(
             df_pep.select(pep_cols),
             on=pep_cols,
             how='left'
         )
 
     return {
-        'cms': df_cms,
+        'csm': df_csm,
         'pep': df_pep,
         'prot': df_prot,
         'link': df_link,
