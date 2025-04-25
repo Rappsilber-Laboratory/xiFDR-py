@@ -10,7 +10,7 @@ authors = [
   { name = "Falk B. Schimweg", email = "git@falk.schimweg.de" }
 ]
 license = { text = "AGPL-3.0-or-later" }
-readme = "README.md"
+readme = "README.rst"
 requires-python = ">=3.10"
 dependencies = [
     "numpy",

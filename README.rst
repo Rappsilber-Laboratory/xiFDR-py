@@ -7,9 +7,7 @@ or protein-protein interactions (PPIs) above a desired significance threshold.
 Further, xiFDR supports *boosting* of FDR levels to obtain the largest possible number of residue-links
 or PPIs by finding the optimal FDR thresholds.
 
-Build documentation
--------------------
+Documentation
+----------------------
 
-.. code-block:: bash
-
-    $ python -m sphinx.cmd.build -M html docs docs/_build
+Documentation can be found under https://xifdr-py.readthedocs.io/
