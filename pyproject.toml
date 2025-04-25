@@ -24,7 +24,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/Rappsilber-Laboratory/xiFDR-py"
-Documentation = "https://github.com/Rappsilber-Laboratory/xiFDR-py"
+Documentation = "https://xifdr-py.readthedocs.io"
 Repository = "https://github.com/Rappsilber-Laboratory/xiFDR-py"
 Issues = "https://github.com/Rappsilber-Laboratory/xiFDR-py/issues"
 
