@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 import polars as pl
+import pytest
 
 from xifdr.fdr import single_fdr, full_fdr
 from xifdr.boosting import boost
@@ -142,6 +143,7 @@ def test_full_fdr():
     pass
 
 
+@pytest.mark.slow
 def test_boosting():
     samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
     fdrs = boost(
@@ -149,8 +151,7 @@ def test_boosting():
         link_fdr=(0, 0.05),
         ppi_fdr=(0, 0.05),
         points=5,
-        n_jobs=4,
-        method="independent_grid"
+        n_jobs=4
     )
     print(fdrs)
     assert(False)
