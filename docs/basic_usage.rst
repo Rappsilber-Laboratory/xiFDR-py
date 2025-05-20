@@ -31,7 +31,7 @@ play special roles in the FDR calculcation:
     start_pos_p2  yes        position(s) of peptide 2 in the according protein(s)
     link_pos_p1   yes        link position in the sequence of peptide 1
     link_pos_p2   yes        link position in the sequence of peptide 2
-    protein_p2    yes        protein(s) related to peptide 2
+    charge        yes        precursor charge
     protein_p1    yes        protein(s) related to peptide 1
     protein_p2    yes        protein(s) related to peptide 2
     decoy_p1      yes        decoy indicator for peptide 1
