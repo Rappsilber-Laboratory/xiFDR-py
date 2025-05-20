@@ -116,7 +116,7 @@ def prepare_columns(df):
     )
     pad_seq = max(
         df.select(col('sequence_p1').str.len_chars()).to_series().max(),
-        df.select(col('sequence_p2').str.len_chars()).to_series().max(),
+        df.select(col('sequence_p2').fill_null('').str.len_chars()).to_series().max(),
     )
     pad_cl = max(
         df.select(cl_pos_p1_str.str.len_chars()).to_series().max(),
