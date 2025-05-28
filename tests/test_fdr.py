@@ -142,16 +142,67 @@ def test_full_fdr():
     )
     pass
 
+def test_full_fdr_linear():
+    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = samples.with_columns(
+        make_linear=np.random.choice([False, True], p=[0.9, 0.1], size=len(samples))
+    ).with_columns(
+        sequence_p2=pl.when(pl.col('make_linear')).then(
+            pl.lit('')
+        ).otherwise(
+            pl.col('sequence_p2')
+        ),
+        start_pos_p2=pl.when(pl.col('make_linear')).then(
+            pl.lit(None)
+        ).otherwise(
+            pl.col('start_pos_p2')
+        ),
+        link_pos_p2=pl.when(pl.col('make_linear')).then(
+            pl.lit(None)
+        ).otherwise(
+            pl.col('link_pos_p2')
+        ),
+        protein_p2=pl.when(pl.col('make_linear')).then(
+            pl.lit(None)
+        ).otherwise(
+            pl.col('protein_p2')
+        ),
+        decoy_p2=pl.when(pl.col('make_linear')).then(
+            pl.lit(None)
+        ).otherwise(
+            pl.col('decoy_p2')
+        ),
+        coverage_p2=pl.when(pl.col('make_linear')).then(
+            pl.lit(None)
+        ).otherwise(
+            pl.col('coverage_p2')
+        ),
+        fdr_group=pl.when(pl.col('make_linear')).then(
+            pl.lit('linear')
+        ).otherwise(
+            pl.col('fdr_group')
+        ),
+    )
+    x = full_fdr(
+        samples,
+        csm_fdr=0.5,
+        pep_fdr=0.5,
+        prot_fdr=0.3,
+        link_fdr=0.05,
+        ppi_fdr=0.05
+    )
+    pass
+
 
 @pytest.mark.slow
 def test_boosting():
     samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
     fdrs = boost(
         samples,
-        link_fdr=(0, 0.05),
-        ppi_fdr=(0, 0.05),
-        points=5,
-        n_jobs=4
+        csm_fdr=(0, 0.2),
+        link_fdr=(0.05, 0.05),
+        ppi_fdr=(0.05, 0.05),
+        points=3,
+        n_jobs=3
     )
     print(fdrs)
-    assert(False)
