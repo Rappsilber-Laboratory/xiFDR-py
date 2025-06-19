@@ -36,7 +36,7 @@ play special roles in the FDR calculcation:
     protein_p2    yes        protein(s) related to peptide 2
     decoy_p1      yes        decoy indicator for peptide 1
     decoy_p2      yes        decoy indicator for peptide 2
-    fdr_group     yes        groups for crosslink FDR calculation
+    fdr_group     no         groups for crosslink FDR calculation
     coverage_p1   no         fragment coverage of peptide 1 (default: 0.5)
     coverage_p2   no         fragment coverage of peptide 2 (default: 0.5)
     ============  =========  ====================================================

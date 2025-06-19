@@ -193,7 +193,7 @@ def _guess_fdr_group(columns: list[str]):
         return _first_lower('.*hetero.*', columns)
     if _re_in('.*homo.*', columns_lower):
         return _first_lower('.*homo.*', columns)
-    raise NoColumnNameGuess(f'Could not guess fdr_group column.')
+    warnings.warn('Could not guess fdr_group column.')
 
 
 def _guess_coverage(columns: list[str]):
