@@ -3,7 +3,7 @@ from xifdr.utils.column_preparation import prepare_columns
 
 def test_column_prep():
     df = pl.DataFrame([
-        [['C'], ['B', 'A'], ['A', 'B', 'B']],  # protein_p1
+        [['C'], ['E', 'A'], ['A', 'B', 'B']],  # protein_p1
         [[1],   [2,   1],   [1,   3,   2]],    # start_p1
         [['A'], ['E', 'E', 'E'], ['X', 'F']],  # protein_p2
         [[1],   [2,   1,   1],   [2, 1]],      # start_p2
@@ -29,7 +29,7 @@ def test_column_prep():
     ])
 
     df_expect = pl.DataFrame([
-        [['A'], ['A', 'B'], ['F', 'X']],  # protein_p1
+        [['A'], ['A', 'E'], ['F', 'X']],  # protein_p1
         [[1], [1, 2], [1, 2]],  # start_p1
         [['C'], ['E', 'E', 'E'], ['A', 'B', 'B']],  # protein_p2
         [[1], [1, 1, 2], [1, 2, 3]],  # start_p2
@@ -50,6 +50,7 @@ def test_column_prep():
         [True, False, False],  # TT
         [False, True, False],  # TD
         [False, False, True],  # DD
+        ['between', 'self', 'between'], # fdr_group
     ], schema=[
         "protein_p1",
         "start_pos_p1",
@@ -70,6 +71,7 @@ def test_column_prep():
         "coverage_p1",
         "coverage_p2",
         "TT", "TD", "DD",
+        "fdr_group"
     ])
 
     df_res = prepare_columns(df)
