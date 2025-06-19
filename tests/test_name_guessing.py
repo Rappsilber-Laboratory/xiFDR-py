@@ -44,3 +44,45 @@ def test_xisearch2():
     }
     mapping = guess_column_names(columns)
     assert expected_mapping == mapping
+
+def test_java_xifdr():
+    columns = [
+        'PSMID', 'run', 'scan', 'PeakListFileName', 'ScanId',
+        'exp charge', 'exp m/z', 'exp mass', 'exp fractionalmass',
+        'match charge', 'match mass', 'match fractionalmass',
+        'Protein1', 'Name1', 'Description1', 'Decoy1',
+        'Protein2', 'Name2', 'Description2', 'Decoy2',
+        'PepSeq1', 'PepSeq2',
+        'PepPos1', 'PepPos2',
+        'PeptideLength1', 'PeptideLength2',
+        'LinkPos1', 'LinkPos2',
+        'ProteinLinkPos1', 'ProteinLinkPos2',
+        'Charge', 'Crosslinker', 'CrosslinkerModMass',
+        'MinFragments', 'P1Fragments', 'P2Fragments',
+        'PeptidesWithDoublets', 'PeptidesWithStubs',
+        'minPepCoverage', 'minPepCoverageAbsolute',
+        'Score',
+        'isDecoy', 'isTT', 'isTD', 'isDD',
+        'fdrGroup', 'fdr', 'ifdr', 'PEP',
+        '', 'PeptidePairFDR',
+        'Protein1FDR', 'Protein2FDR',
+        'LinkFDR', 'PPIFDR', 'peptide pair id',
+        'link id', 'ppi id',
+    ]
+    expected_mapping = {
+        'Score': 'score',
+        'PepSeq1': 'sequence_p1',
+        'PepSeq2': 'sequence_p2',
+        'PepPos1': 'start_pos_p1',
+        'PepPos2': 'start_pos_p2',
+        'LinkPos1': 'link_pos_p1',
+        'LinkPos2': 'link_pos_p2',
+        'Charge': 'charge',
+        'Protein1': 'protein_p1',
+        'Protein2': 'protein_p2',
+        'Decoy1': 'decoy_p1',
+        'Decoy2': 'decoy_p2',
+        'fdrGroup': 'fdr_group',
+    }
+    mapping = guess_column_names(columns)
+    assert expected_mapping == mapping

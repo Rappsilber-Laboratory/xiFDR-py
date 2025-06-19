@@ -82,17 +82,17 @@ def _guess_start_pos(columns: list[str]):
             _first_lower('start_pos_p1', columns),
             _first_lower('start_pos_p2', columns),
         )
-    if _re_in('pep.*pos.*1', columns_lower) and _re_in('pep.*pos.*1', columns_lower) in columns_lower:
+    if _re_in('pep.*pos.*1', columns_lower) and _re_in('pep.*pos.*2', columns_lower):
         return (
             _first_lower('pep.*pos.*1', columns),
             _first_lower('pep.*pos.*2', columns),
         )
-    if _re_in('start.*1', columns_lower) and _re_in('start.*2', columns_lower) in columns_lower:
+    if _re_in('start.*1', columns_lower) and _re_in('start.*2', columns_lower):
         return (
             _first_lower('start.*1', columns),
             _first_lower('start.*2', columns),
         )
-    if _re_in('alpha.*pos.*1', columns_lower) and _re_in('beta.*pos.*1', columns_lower) in columns_lower:
+    if _re_in('alpha.*pos.*1', columns_lower) and _re_in('beta.*pos.*1', columns_lower):
         return (
             _first_lower('alpha.*pos.*1', columns),
             _first_lower('beta.*pos.*2', columns),
@@ -115,8 +115,8 @@ def _guess_link_pos(columns: list[str]):
         )
     if _re_in('link.*1', columns_lower) and _re_in('link.*2', columns_lower):
         return (
-            _first_lower('link_pos_p1', columns),
-            _first_lower('link_pos_p2', columns),
+            _first_lower('link.*1', columns),
+            _first_lower('link.*2', columns),
         )
     if _re_in('alpha.*pos', columns_lower) and _re_in('beta.*pos', columns_lower):
         return (
@@ -149,8 +149,8 @@ def _guess_protein(columns: list[str]):
         )
     if _re_in('prot.*1', columns_lower) and _re_in('prot.*2', columns_lower):
         return (
-            _first_lower('prot.*1', columns_lower),
-            _first_lower('prot.*2', columns_lower),
+            _first_lower('prot.*1', columns),
+            _first_lower('prot.*2', columns),
         )
     raise NoColumnNameGuess(f'Could not guess protein columns.')
 
@@ -168,8 +168,8 @@ def _guess_decoy(columns: list[str]):
         )
     if _re_in('.*decoy.*1', columns_lower) and _re_in('.*decoy.*2', columns_lower):
         return (
-            _first_lower('.*decoy.*1', columns_lower),
-            _first_lower('.*decoy.*2', columns_lower),
+            _first_lower('.*decoy.*1', columns),
+            _first_lower('.*decoy.*2', columns),
         )
     raise NoColumnNameGuess(f'Could not guess decoy columns.')
 
@@ -226,20 +226,20 @@ def _guess_coverage(columns: list[str]):
         )
     if _re_in('.*coverage.*1', columns_lower) and _re_in('.*coverage.*2', columns_lower):
         return (
-            _first_lower('.*coverage.*1', columns_lower),
-            _first_lower('.*coverage.*2', columns_lower),
+            _first_lower('.*coverage.*1', columns),
+            _first_lower('.*coverage.*2', columns),
         )
     warnings.warn('Could not guess peak coverage columns.')
     return None
 
 def _re_in(pattern, strings):
     return any([
-        s for s in strings if re.fullmatch(pattern, s.lower())
+        s for s in strings if re.fullmatch(pattern, s)
     ])
 
 def _first_lower(pattern, columns):
     return [
-        c for c in columns if re.fullmatch(pattern, c)
+        c for c in columns if re.fullmatch(pattern, c.lower())
     ][0]
 
 class NoColumnNameGuess(Exception):
