@@ -45,8 +45,30 @@ def prepare_columns(df):
     for c in list_cols:
         if not isinstance(df[c].dtype, pl.List):
             df = df.with_columns(
-                col(c).cast(pl.String).str.split(';')
+                col(c).cast(pl.String).str.replace_all(
+                    '[ ]*',
+                    ''
+                ).str.split(';')
             )
+
+    # Generate fdr_group if not present
+    if 'fdr_group' not in df.columns:
+        df = df.with_columns(
+            fdr_group=(
+                (pl.col('protein_p1').list.set_intersection(
+                    pl.col('protein_p2')
+                ).list.len()==0).cast(pl.String).replace(
+                    ['true', 'false'],
+                    ['between', 'self']
+                )
+            )
+        ).with_columns(
+            fdr_group=pl.when(pl.col('protein_p2').eq([]) | pl.col('protein_p2').is_null()).then(
+                pl.lit('linear')
+            ).otherwise(
+                pl.col('fdr_group')
+            )
+        )
 
     # Create decoy_class column if not present
     if 'decoy_class' not in df.columns:
