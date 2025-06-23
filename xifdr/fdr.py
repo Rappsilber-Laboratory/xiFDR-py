@@ -180,8 +180,9 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     df_prot = df_prot.with_columns(
         prot_fdr = single_grouped_fdr(df_prot, fdr_group_col='protein_fdr_group')
     )
+    df_prot = df_prot.filter(pl.col('prot_fdr') <= prot_fdr)
 
-    passed_prots = df_prot.filter(pl.col('prot_fdr') <= prot_fdr)['protein'].explode()
+    passed_prots = df_prot['protein'].explode()
     passed_prots = passed_prots.list.join(';')
     passed_prots = passed_prots.str.replace_all(decoy_adjunct, '')
     passed_prots = passed_prots.str.split(';')
