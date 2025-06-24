@@ -1,5 +1,6 @@
-import typing
 import logging
+import warnings
+
 import pandas as pd
 import polars as pl
 from xifdr.utils.column_preparation import prepare_columns
@@ -15,6 +16,8 @@ csm_cols = [
 pep_cols = ['decoy_p1', 'decoy_p2', 'sequence_p1', 'sequence_p2', 'protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2']
 link_cols = ['decoy_p1', 'decoy_p2', 'sequence_p1', 'sequence_p2', 'protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2']
 ppi_cols = ['decoy_p1', 'decoy_p2', 'protein_p1', 'protein_p2', 'cl_pos_p2']
+fdr_groups_csm_pep = ['self', 'between', 'linear']  # FDR groups for CSM and peptide level
+fdr_groups_link_ppi = ['self', 'between']  # FDR groups for link and PPI level
 
 
 def full_fdr(df: pl.DataFrame | pd.DataFrame,
@@ -27,6 +30,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
              unique_csm: bool = True,
              filter_back:bool = True,
              prepare_column:bool = True,
+             td_prob:int = 2,
+             td_prot_prob:int = 2,
              custom_aggs:dict = None) -> dict[str, pl.DataFrame]:
     """
     
@@ -52,6 +57,10 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         Filter lower levels to include only matches that also pass on higher levels
     prepare_column
         Perform preparation of aggregation columns like sorting ambiguous proteins and swapping protein 1/2
+    td_prob
+        Minimum theoretical TD machtes for the FDR levels (except protein level)
+    td_prot_prob
+        Minimum theoretical TD machtes for the protein FDR level
     custom_aggs
         Custom aggregation functions for the FDR levels
 
@@ -98,25 +107,25 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     ]
     never_agg_cols += ['score', 'protein_score_p1', 'protein_score_p2']
 
-    df_csm = _csm_fdr(df, csm_fdr, unique_csm)
+    df_csm = _csm_fdr(df, csm_fdr, unique_csm, td_prob)
 
     # Calculate peptide FDR and filter
     logger.debug('Calculate peptide FDR and filter')
-    df_pep = _pep_fdr(df_csm, aggs['pep'], pep_fdr, first_aggs, never_agg_cols)
+    df_pep = _pep_fdr(df_csm, aggs['pep'], pep_fdr, first_aggs, never_agg_cols, td_prob)
 
     logger.debug('Calculate protein FDR and filter')
-    df_prot = _prot_fdr(df_pep, aggs['prot'], prot_fdr)
+    df_prot = _prot_fdr(df_pep, aggs['prot'], prot_fdr, td_prot_prob)
 
     logger.debug('Filter peptide pairs for passed proteins')
     df_pep = _prot_filter(df_pep, df_prot, decoy_adjunct)
 
     # Calculate link FDR and cutoff
     logger.debug('Calculate link FDR and cutoff')
-    df_link = _link_fdr(df_pep, aggs['link'], link_fdr, first_aggs, never_agg_cols)
+    df_link = _link_fdr(df_pep, aggs['link'], link_fdr, first_aggs, never_agg_cols, td_prob)
 
     # Calculate PPI FDR
     logger.debug('Calculate PPI FDR')
-    df_ppi = _ppi_fdr(df_link, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols)
+    df_ppi = _ppi_fdr(df_link, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols, td_prob)
 
     # Back-fitler levels
     if filter_back:
@@ -144,7 +153,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         'ppi': df_ppi,
     }
 
-def _csm_fdr(df, csm_fdr, unique_csm):
+def _csm_fdr(df, csm_fdr, unique_csm, td_prob):
     if unique_csm:
         df_csm = df.sort('score', descending=True).unique(subset=csm_cols, keep='first')
     else:
@@ -155,10 +164,19 @@ def _csm_fdr(df, csm_fdr, unique_csm):
     df_csm = df_csm.with_columns(
         csm_fdr = single_grouped_fdr(df_csm)
     )
-    return df_csm.filter(pl.col('csm_fdr') <= csm_fdr)
+    df_csm = df_csm.filter(pl.col('csm_fdr') <= csm_fdr)
+    for fdr_group in fdr_groups_csm_pep:
+        df_csm_tt = df_csm.filter(
+            pl.col('TT'),
+            pl.col('fdr_group') == fdr_group
+        )
+        if len(df_csm_tt)*csm_fdr < td_prob:
+            warnings.warn(f'Insufficient TT for CSM FDR in group {fdr_group}.')
+            df_csm = df_csm.filter(pl.col('fdr_group') != fdr_group)
+    return df_csm
 
 
-def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols):
+def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob):
     pep_merge_cols = [c for c in df_csm.columns if c not in pep_cols+never_agg_cols]
     df_pep = df_csm.group_by(pep_cols).agg(
         *first_aggs,
@@ -173,64 +191,22 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols):
     df_pep = df_pep.with_columns(
         pep_fdr = single_grouped_fdr(df_pep)
     )
-    return df_pep.filter(pl.col('pep_fdr') <= pep_fdr)
-
-
-def _prot_filter(df_pep, df_prot, decoy_adjunct):
-    passed_prots = df_prot['protein'].explode()
-    passed_prots = passed_prots.list.join(';')
-    passed_prots = passed_prots.str.replace_all(decoy_adjunct, '')
-    passed_prots = passed_prots.str.split(';')
-    passed_prots = passed_prots.list.sort()
-    passed_prots = passed_prots.list.join(';')
-    passed_prots = passed_prots.unique().alias('passed_prots')
-
-    ## Filter left over peptide pairs
-    logger.debug('Filter left over peptide pairs')
-    df_pep = df_pep.with_columns(
-        base_protein_p1 = (
-            pl.col('protein_p1')
-                # Replace decoy_adjunct
-                .list.join(';')
-                .str.replace_all(decoy_adjunct, '')
-                # Sort base protein names
-                .str.split(';')
-                .list.sort()
-                # Join to protein group
-                .list.join(';')
-        ),
-        base_protein_p2 = (
-            pl.col('protein_p2')
-                # Replace decoy_adjunct
-                .list.join(';')
-                .str.replace_all(decoy_adjunct, '')
-                # Sort base protein names
-                .str.split(';')
-                .list.sort()
-                # Join to protein group
-                .list.join(';')
-        ),
-    )
-
-    return df_pep.join(
-        passed_prots.to_frame(),
-        left_on=['base_protein_p1'],
-        right_on=['passed_prots'],
-        how='inner',
-        suffix='p1'
-    ).join(
-        passed_prots.to_frame(),
-        left_on=['base_protein_p2'],
-        right_on=['passed_prots'],
-        how='inner',
-        suffix='p2'
-    )
+    df_pep = df_pep.filter(pl.col('pep_fdr') <= pep_fdr)
+    for fdr_group in fdr_groups_csm_pep:
+        df_pep_tt = df_pep.filter(
+            pl.col('TT'),
+            pl.col('fdr_group') == fdr_group
+        )
+        if len(df_pep_tt)*pep_fdr < td_prob:
+            warnings.warn(f'Insufficient TT for Peptide FDR in group {fdr_group}.')
+            df_pep = df_pep.filter(pl.col('fdr_group') != fdr_group)
+    return df_pep
 
 
 def _prot_fdr(df_pep:pl.DataFrame,
               agg,
-              prot_fdr:float = 1.0,
-              min_td: int = 10) -> pl.DataFrame:
+              prot_fdr,
+              td_prot_prob) -> pl.DataFrame:
     # Construct protein (group) DF
     df_prot_p1 = df_pep.select([
         'protein_p1', 'protein_score_p1', 'decoy_p1', 'fdr_group'
@@ -287,7 +263,7 @@ def _prot_fdr(df_pep:pl.DataFrame,
     invalid_groups = []
     for g in fdr_groups:
         df_g = df_prot.filter(pl.col('protein_fdr_group') == g)
-        if len(df_g.filter(pl.col('TT'))) >= min_td:
+        if len(df_g.filter(pl.col('TT'))) >= td_prot_prob:
             valid_groups.append(df_g)
         else:
             invalid_groups.append(df_g)
@@ -296,12 +272,66 @@ def _prot_fdr(df_pep:pl.DataFrame,
             protein_fdr_group=pl.lit('invalid_merge')
         )
         invalid_df = invalid_df.filter(pl.col('prot_fdr') <= prot_fdr)
-        if len(invalid_df.filter(pl.col('TT'))) >= min_td:
+        if len(invalid_df.filter(pl.col('TT')))*prot_fdr >= td_prot_prob:
             valid_groups.append(invalid_df)
-    return pl.concat(valid_groups)
+    df_prot = pl.concat(valid_groups)
+    if len(df_prot) == 0:
+        warnings.warn('Insufficient TT for protein FDR.')
+    return df_prot
 
 
-def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols):
+def _prot_filter(df_pep, df_prot, decoy_adjunct):
+    passed_prots = df_prot['protein'].explode()
+    passed_prots = passed_prots.list.join(';')
+    passed_prots = passed_prots.str.replace_all(decoy_adjunct, '')
+    passed_prots = passed_prots.str.split(';')
+    passed_prots = passed_prots.list.sort()
+    passed_prots = passed_prots.list.join(';')
+    passed_prots = passed_prots.unique().alias('passed_prots')
+
+    ## Filter left over peptide pairs
+    logger.debug('Filter left over peptide pairs')
+    df_pep = df_pep.with_columns(
+        base_protein_p1 = (
+            pl.col('protein_p1')
+                # Replace decoy_adjunct
+                .list.join(';')
+                .str.replace_all(decoy_adjunct, '')
+                # Sort base protein names
+                .str.split(';')
+                .list.sort()
+                # Join to protein group
+                .list.join(';')
+        ),
+        base_protein_p2 = (
+            pl.col('protein_p2')
+                # Replace decoy_adjunct
+                .list.join(';')
+                .str.replace_all(decoy_adjunct, '')
+                # Sort base protein names
+                .str.split(';')
+                .list.sort()
+                # Join to protein group
+                .list.join(';')
+        ),
+    )
+
+    return df_pep.join(
+        passed_prots.to_frame(),
+        left_on=['base_protein_p1'],
+        right_on=['passed_prots'],
+        how='inner',
+        suffix='p1'
+    ).join(
+        passed_prots.to_frame(),
+        left_on=['base_protein_p2'],
+        right_on=['passed_prots'],
+        how='inner',
+        suffix='p2'
+    )
+
+
+def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob):
     link_merge_cols = [c for c in df_pep.columns if c not in link_cols+never_agg_cols]
     df_link = df_pep.filter(
         pl.col('fdr_group') != "linear" # Disregard linear peptides from here on
@@ -316,10 +346,19 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols):
     df_link = df_link.with_columns(
         link_fdr = single_grouped_fdr(df_link)
     )
-    return df_link.filter(pl.col('link_fdr') <= link_fdr)
+    df_link = df_link.filter(pl.col('link_fdr') <= link_fdr)
+    for fdr_group in fdr_groups_link_ppi:
+        df_link_tt = df_link.filter(
+            pl.col('TT'),
+            pl.col('fdr_group') == fdr_group
+        )
+        if len(df_link_tt)*link_fdr < td_prob:
+            warnings.warn(f'Insufficient TT for link FDR in group {fdr_group}.')
+            df_link = df_link.filter(pl.col('fdr_group') != fdr_group)
+    return df_link
 
 
-def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols):
+def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob):
     ppi_merge_cols = [c for c in df_link.columns if c not in ppi_cols+never_agg_cols]
     df_ppi = df_link.with_columns(
         protein_p1_join=pl.col('protein_p1').list.unique().list.sort().list.join(';'),
@@ -356,7 +395,16 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols):
     df_ppi = df_ppi.with_columns(
         ppi_fdr = single_grouped_fdr(df_ppi)
     )
-    return df_ppi.filter(pl.col('ppi_fdr') <= ppi_fdr)
+    df_ppi = df_ppi.filter(pl.col('ppi_fdr') <= ppi_fdr)
+    for fdr_group in fdr_groups_link_ppi:
+        df_ppi_tt = df_ppi.filter(
+            pl.col('TT'),
+            pl.col('fdr_group') == fdr_group
+        )
+        if len(df_ppi_tt)*ppi_fdr < td_prob:
+            warnings.warn(f'Insufficient TT for link FDR in group {fdr_group}.')
+            df_ppi = df_ppi.filter(pl.col('fdr_group') != fdr_group)
+    return df_ppi
 
 
 def single_grouped_fdr(df: pl.DataFrame | pd.DataFrame, fdr_group_col: str = "fdr_group") -> pl.Series:
