@@ -105,11 +105,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     df_pep = _pep_fdr(df_csm, aggs['pep'], pep_fdr, first_aggs, never_agg_cols)
 
     logger.debug('Calculate protein FDR and filter')
-    df_prot = _prot_fdr(
-        df_pep,
-        aggs['prot'],
-        prot_fdr
-    )
+    df_prot = _prot_fdr(df_pep, aggs['prot'], prot_fdr)
 
     logger.debug('Filter peptide pairs for passed proteins')
     df_pep = _prot_filter(df_pep, df_prot, decoy_adjunct)
