@@ -3,7 +3,7 @@ import polars as pl
 from xifdr.fdr import full_fdr, _csm_fdr, _pep_fdr, _prot_fdr, _link_fdr, _ppi_fdr
 
 
-def test_td_prob():
+def test_standard_td_prob():
     agg = (pl.col('score')**2).sum().sqrt()
     never_aggs = ['fdr_group', 'decoy_class', 'TT', 'TD', 'DD', 'score', 'protein_score_p1', 'protein_score_p2']
     first_aggs = [
@@ -36,6 +36,20 @@ def test_td_prob():
         assert len(res.filter(pl.col('fdr_group') == fdr_group)) == 0
 
         # Test too few TT in peptide level
+        n_tt = min(len(x['csm'].filter('TT', pl.col('fdr_group') == fdr_group)), 99)
+        n_td = min(len(x['csm'].filter('TD', pl.col('fdr_group') == fdr_group)), 20)
+        n_dd = min(len(x['csm'].filter('DD', pl.col('fdr_group') == fdr_group)), 10)
+        df = pl.concat([
+            x['csm'].filter('TT', pl.col('fdr_group') == fdr_group).sample(n_tt, seed=0),
+            x['csm'].filter('TD', pl.col('fdr_group') == fdr_group).sample(n_td, seed=0),
+            x['csm'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
+            x['csm'].filter(pl.col('fdr_group') != fdr_group)
+        ])
+        res = _pep_fdr(df, agg, 0.01, td_prob=1, first_aggs=first_aggs, never_agg_cols=never_aggs)
+        assert len(res.filter(pl.col('fdr_group') == fdr_group)) == 0
+
+    for fdr_group in ['self', 'between']:
+        # Test too few TT in link level
         n_tt = min(len(x['pep'].filter('TT', pl.col('fdr_group') == fdr_group)), 99)
         n_td = min(len(x['pep'].filter('TD', pl.col('fdr_group') == fdr_group)), 20)
         n_dd = min(len(x['pep'].filter('DD', pl.col('fdr_group') == fdr_group)), 10)
@@ -45,11 +59,10 @@ def test_td_prob():
             x['pep'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
             x['pep'].filter(pl.col('fdr_group') != fdr_group)
         ])
-        res = _pep_fdr(df, agg, 0.01, td_prob=1, first_aggs=first_aggs, never_agg_cols=never_aggs)
+        res = _link_fdr(df, agg, 0.01, td_prob=1, first_aggs=first_aggs, never_agg_cols=never_aggs)
         assert len(res.filter(pl.col('fdr_group') == fdr_group)) == 0
 
-    for fdr_group in ['self', 'between']:
-        # Test too few TT in link level
+        # Test too few TT in PPI level
         n_tt = min(len(x['link'].filter('TT', pl.col('fdr_group') == fdr_group)), 99)
         n_td = min(len(x['link'].filter('TD', pl.col('fdr_group') == fdr_group)), 20)
         n_dd = min(len(x['link'].filter('DD', pl.col('fdr_group') == fdr_group)), 10)
@@ -58,19 +71,6 @@ def test_td_prob():
             x['link'].filter('TD', pl.col('fdr_group') == fdr_group).sample(n_td, seed=0),
             x['link'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
             x['link'].filter(pl.col('fdr_group') != fdr_group)
-        ])
-        res = _link_fdr(df, agg, 0.01, td_prob=1, first_aggs=first_aggs, never_agg_cols=never_aggs)
-        assert len(res.filter(pl.col('fdr_group') == fdr_group)) == 0
-
-        # Test too few TT in PPI level
-        n_tt = min(len(x['ppi'].filter('TT', pl.col('fdr_group') == fdr_group)), 99)
-        n_td = min(len(x['ppi'].filter('TD', pl.col('fdr_group') == fdr_group)), 20)
-        n_dd = min(len(x['ppi'].filter('DD', pl.col('fdr_group') == fdr_group)), 10)
-        df = pl.concat([
-            x['ppi'].filter('TT', pl.col('fdr_group') == fdr_group).sample(n_tt, seed=0),
-            x['ppi'].filter('TD', pl.col('fdr_group') == fdr_group).sample(n_td, seed=0),
-            x['ppi'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
-            x['ppi'].filter(pl.col('fdr_group') != fdr_group)
         ])
         res = _ppi_fdr(df, agg, 0.01, td_prob=1, first_aggs=first_aggs, never_agg_cols=never_aggs)
         assert len(res.filter(pl.col('fdr_group') == fdr_group)) == 0
