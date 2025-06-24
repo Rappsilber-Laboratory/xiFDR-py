@@ -27,11 +27,11 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
              link_fdr:float = 1.0,
              ppi_fdr:float = 1.0,
              decoy_adjunct:str = 'REV_',
-             unique_csm: bool = True,
+             unique_csm:bool = True,
              filter_back:bool = True,
              prepare_column:bool = True,
              td_prob:int = 2,
-             td_prot_prob:int = 2,
+             td_prot_prob:int = 10,
              custom_aggs:dict = None) -> dict[str, pl.DataFrame]:
     """
     
