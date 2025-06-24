@@ -274,9 +274,9 @@ def _prot_fdr(df_pep:pl.DataFrame,
         invalid_df = invalid_df.filter(pl.col('prot_fdr') <= prot_fdr)
         if len(invalid_df.filter(pl.col('TT')))*prot_fdr >= td_prot_prob:
             valid_groups.append(invalid_df)
-    df_prot = pl.concat(valid_groups)
-    if len(df_prot) == 0:
+    if len(valid_groups) == 0:
         warnings.warn('Insufficient TT for protein FDR.')
+    df_prot = pl.concat(valid_groups)
     return df_prot
 
 
