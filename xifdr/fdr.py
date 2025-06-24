@@ -229,7 +229,7 @@ def _prot_fdr(df_pep:pl.DataFrame,
         df_prot_p2
     ])
     df_prot = df_prot.with_columns(
-        protein_group=pl.col('protein').list.unique()
+        protein_group=pl.col('protein').list.unique().list.sort()
     )
     df_prot = df_prot.group_by(['protein_group', 'decoy']).agg(
         pl.col('protein'),
