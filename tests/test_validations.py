@@ -126,7 +126,6 @@ def test_protein_td_inval_merge():
     assert res.filter(pl.col('protein_fdr_group') == 'self_or_linear').height == 0
     assert res.filter(pl.col('protein_fdr_group') == 'invalid_merged').height > 0
 
-
 def test_protein_td_only_supp():
     """
     Test that the protein level FDR keeps only unsupported and not linear/self matches
