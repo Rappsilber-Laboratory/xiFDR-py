@@ -263,7 +263,7 @@ def _prot_fdr(df_pep:pl.DataFrame,
     invalid_groups = []
     for g in fdr_groups:
         df_g = df_prot.filter(pl.col('protein_fdr_group') == g)
-        if len(df_g.filter(pl.col('TT'))) >= td_prot_prob:
+        if len(df_g.filter(pl.col('TT')))*prot_fdr >= td_prot_prob:
             valid_groups.append(df_g)
         else:
             invalid_groups.append(df_g)
