@@ -269,7 +269,7 @@ def _prot_fdr(df_pep:pl.DataFrame,
             invalid_groups.append(df_g)
     if len(invalid_groups) > 1:
         invalid_df = pl.concat(invalid_groups).with_columns(
-            protein_fdr_group=pl.lit('invalid_merge')
+            protein_fdr_group=pl.lit('invalid_merged')
         )
         invalid_df = invalid_df.filter(pl.col('prot_fdr') <= prot_fdr)
         if len(invalid_df.filter(pl.col('TT')))*prot_fdr >= td_prot_prob:
