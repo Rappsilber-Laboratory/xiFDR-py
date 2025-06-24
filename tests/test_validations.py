@@ -1,3 +1,5 @@
+import string
+
 import polars as pl
 
 from xifdr.fdr import full_fdr, _csm_fdr, _pep_fdr, _prot_fdr, _link_fdr, _ppi_fdr
@@ -33,7 +35,7 @@ def test_standard_td_prob():
             x['csm'].filter(pl.col('fdr_group') != fdr_group)
         ])
         res = _csm_fdr(df, 0.01, True, td_prob=1)
-        assert len(res.filter(pl.col('fdr_group') == fdr_group)) == 0
+        assert res.filter(pl.col('fdr_group') == fdr_group).height == 0
 
         # Test too few TT in peptide level
         n_tt = min(len(x['csm'].filter('TT', pl.col('fdr_group') == fdr_group)), 99)
@@ -46,7 +48,7 @@ def test_standard_td_prob():
             x['csm'].filter(pl.col('fdr_group') != fdr_group)
         ])
         res = _pep_fdr(df, agg, 0.01, td_prob=1, first_aggs=first_aggs, never_agg_cols=never_aggs)
-        assert len(res.filter(pl.col('fdr_group') == fdr_group)) == 0
+        assert res.filter(pl.col('fdr_group') == fdr_group).height == 0
 
     for fdr_group in ['self', 'between']:
         # Test too few TT in link level
@@ -60,7 +62,7 @@ def test_standard_td_prob():
             x['pep'].filter(pl.col('fdr_group') != fdr_group)
         ])
         res = _link_fdr(df, agg, 0.01, td_prob=1, first_aggs=first_aggs, never_agg_cols=never_aggs)
-        assert len(res.filter(pl.col('fdr_group') == fdr_group)) == 0
+        assert res.filter(pl.col('fdr_group') == fdr_group).height == 0
 
         # Test too few TT in PPI level
         n_tt = min(len(x['link'].filter('TT', pl.col('fdr_group') == fdr_group)), 99)
@@ -73,4 +75,103 @@ def test_standard_td_prob():
             x['link'].filter(pl.col('fdr_group') != fdr_group)
         ])
         res = _ppi_fdr(df, agg, 0.01, td_prob=1, first_aggs=first_aggs, never_agg_cols=never_aggs)
-        assert len(res.filter(pl.col('fdr_group') == fdr_group)) == 0
+        assert res.filter(pl.col('fdr_group') == fdr_group).height == 0
+
+def test_protein_td_inval_merge():
+    """
+    Test that the protein level FDR keeps unsupported and linear/self matches
+    due to sufficient TT matches when joined.
+    """
+    agg = (pl.col('score')**2).sum().sqrt()
+    # 6 unsupported
+    df_unsup = pl.DataFrame({
+        'protein_p1': list(string.ascii_uppercase)[0:5],
+        'protein_p2': list(string.ascii_uppercase)[1:6],
+        'fdr_group': ['between']*(5-0),
+    })
+    # 6 self
+    df_self = pl.DataFrame({
+        'protein_p1': list(string.ascii_uppercase)[7:13],
+        'protein_p2': list(string.ascii_uppercase)[7:13],
+        'fdr_group': ['self']*(13-7),
+    })
+    # 10 supported + 1 self
+    df_sup_self = pl.DataFrame({
+        'protein_p1': list(string.ascii_uppercase)[15:25],
+        'protein_p2': list(string.ascii_uppercase)[15:25],
+        'fdr_group': ['self']*(25-15),
+    })
+    df_sup_between = pl.DataFrame({
+        'protein_p1': list(string.ascii_uppercase)[15:25],
+        'protein_p2': list(string.ascii_uppercase)[16:26],
+        'fdr_group': ['between']*(25-15),
+    })
+    df = pl.concat([
+        df_unsup,
+        df_self,
+        df_sup_self,
+        df_sup_between,
+    ])
+    df = df.with_columns(
+        pl.col('protein_p1').str.split(''),
+        pl.col('protein_p2').str.split(''),
+        decoy_p1=pl.lit(False),
+        decoy_p2=pl.lit(False),
+        protein_score_p1=pl.lit(0),
+        protein_score_p2=pl.lit(0),
+    )
+    res = _prot_fdr(df, agg, 0.1, 1)
+    assert res.filter(pl.col('protein_fdr_group') == 'supported_between').height > 0
+    assert res.filter(pl.col('protein_fdr_group') == 'unsupported_between').height == 0
+    assert res.filter(pl.col('protein_fdr_group') == 'self_or_linear').height == 0
+    assert res.filter(pl.col('protein_fdr_group') == 'invalid_merged').height > 0
+
+
+def test_protein_td_inval_merge():
+    """
+    Test that the protein level FDR keeps unsupported and linear/self matches
+    due to sufficient TT matches when joined.
+    """
+    agg = (pl.col('score')**2).sum().sqrt()
+    # 4 unsupported
+    df_unsup = pl.DataFrame({
+        'protein_p1': list(string.ascii_uppercase)[0:3],
+        'protein_p2': list(string.ascii_uppercase)[1:4],
+        'fdr_group': ['between']*(3-0),
+    })
+    # 4 self
+    df_self = pl.DataFrame({
+        'protein_p1': list(string.ascii_uppercase)[7:11],
+        'protein_p2': list(string.ascii_uppercase)[7:11],
+        'fdr_group': ['self']*(11-7),
+    })
+    # 10 supported + 1 self
+    df_sup_self = pl.DataFrame({
+        'protein_p1': list(string.ascii_uppercase)[15:25],
+        'protein_p2': list(string.ascii_uppercase)[15:25],
+        'fdr_group': ['self']*(25-15),
+    })
+    df_sup_between = pl.DataFrame({
+        'protein_p1': list(string.ascii_uppercase)[15:25],
+        'protein_p2': list(string.ascii_uppercase)[16:26],
+        'fdr_group': ['between']*(25-15),
+    })
+    df = pl.concat([
+        df_unsup,
+        df_self,
+        df_sup_self,
+        df_sup_between,
+    ])
+    df = df.with_columns(
+        pl.col('protein_p1').str.split(''),
+        pl.col('protein_p2').str.split(''),
+        decoy_p1=pl.lit(False),
+        decoy_p2=pl.lit(False),
+        protein_score_p1=pl.lit(0),
+        protein_score_p2=pl.lit(0),
+    )
+    res = _prot_fdr(df, agg, 0.1, 1)
+    assert res.filter(pl.col('protein_fdr_group') == 'supported_between').height > 0
+    assert res.filter(pl.col('protein_fdr_group') == 'unsupported_between').height == 0
+    assert res.filter(pl.col('protein_fdr_group') == 'self_or_linear').height == 0
+    assert res.filter(pl.col('protein_fdr_group') == 'invalid_merged').height == 0
