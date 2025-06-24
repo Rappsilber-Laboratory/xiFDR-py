@@ -127,10 +127,10 @@ def test_protein_td_inval_merge():
     assert res.filter(pl.col('protein_fdr_group') == 'invalid_merged').height > 0
 
 
-def test_protein_td_inval_merge():
+def test_protein_td_only_supp():
     """
-    Test that the protein level FDR keeps unsupported and linear/self matches
-    due to sufficient TT matches when joined.
+    Test that the protein level FDR keeps only unsupported and not linear/self matches
+    due to insufficient TT matches.
     """
     agg = (pl.col('score')**2).sum().sqrt()
     # 4 unsupported
