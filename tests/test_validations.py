@@ -35,7 +35,7 @@ def test_standard_td_prob():
             x['csm'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
             x['csm'].filter(pl.col('fdr_group') != fdr_group)
         ])
-        res = _csm_fdr(df, 0.01, True, td_prob=1)
+        res = _csm_fdr(df, 0.01, True, td_prob=1, td_dd_ratio=0)
         assert res.filter(pl.col('fdr_group') == fdr_group).height == 0
 
         # Test too few TT in peptide level
@@ -48,7 +48,11 @@ def test_standard_td_prob():
             x['csm'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
             x['csm'].filter(pl.col('fdr_group') != fdr_group)
         ])
-        res = _pep_fdr(df, agg, 0.01, td_prob=1, first_aggs=first_aggs, never_agg_cols=never_aggs)
+        res = _pep_fdr(
+            df, agg, 0.01,
+            first_aggs=first_aggs, never_agg_cols=never_aggs,
+            td_prob=1, td_dd_ratio=0
+        )
         assert res.filter(pl.col('fdr_group') == fdr_group).height == 0
 
     for fdr_group in ['self', 'between']:
@@ -62,7 +66,11 @@ def test_standard_td_prob():
             x['pep'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
             x['pep'].filter(pl.col('fdr_group') != fdr_group)
         ])
-        res = _link_fdr(df, agg, 0.01, td_prob=1, first_aggs=first_aggs, never_agg_cols=never_aggs)
+        res = _link_fdr(
+            df, agg, 0.01,
+            first_aggs=first_aggs, never_agg_cols=never_aggs,
+            td_prob=1, td_dd_ratio=0
+        )
         assert res.filter(pl.col('fdr_group') == fdr_group).height == 0
 
         # Test too few TT in PPI level
@@ -75,7 +83,11 @@ def test_standard_td_prob():
             x['link'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
             x['link'].filter(pl.col('fdr_group') != fdr_group)
         ])
-        res = _ppi_fdr(df, agg, 0.01, td_prob=1, first_aggs=first_aggs, never_agg_cols=never_aggs)
+        res = _ppi_fdr(
+            df, agg, 0.01,
+            first_aggs=first_aggs, never_agg_cols=never_aggs,
+            td_prob=1, td_dd_ratio=0
+        )
         assert res.filter(pl.col('fdr_group') == fdr_group).height == 0
 
 def test_protein_td_inval_merge():
