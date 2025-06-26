@@ -128,22 +128,32 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     df_ppi = _ppi_fdr(df_link, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols, td_prob)
 
     # Back-fitler levels
+    df_link = df_link.join(
+        df_ppi.select(ppi_cols).with_columns(pass_threshold=pl.lit(True)),
+        on=ppi_cols,
+        how='full',
+    ).with_columns(
+        pl.col('pass_threshold').fill_null(pl.lit(False))
+    )
+    df_pep = df_pep.join(
+        df_link.select(link_cols).with_columns(pass_threshold=pl.lit(True)),
+        on=link_cols,
+        how='full',
+    ).with_columns(
+        pl.col('pass_threshold').fill_null(pl.lit(False))
+    )
+    df_csm = df_csm.join(
+        df_pep.select(pep_cols).with_columns(pass_threshold=pl.lit(True)),
+        on=pep_cols,
+        how='full',
+    ).with_columns(
+        pl.col('pass_threshold').fill_null(pl.lit(False))
+    )
+
     if filter_back:
-        df_link = df_link.join(
-            df_ppi.select(ppi_cols),
-            on=ppi_cols,
-            how='left'
-        )
-        df_pep = df_pep.join(
-            df_link.select(link_cols),
-            on=link_cols,
-            how='left'
-        )
-        df_csm = df_csm.join(
-            df_pep.select(pep_cols),
-            on=pep_cols,
-            how='left'
-        )
+        df_link = df_link.filter('pass_threshold')
+        df_pep = df_pep.filter('pass_threshold')
+        df_csm = df_csm.filter('pass_threshold')
 
     return {
         'csm': df_csm,
