@@ -180,8 +180,19 @@ def _csm_fdr(df, csm_fdr, unique_csm, td_prob):
             pl.col('TT'),
             pl.col('fdr_group') == fdr_group
         )
+        df_csm_td = df_csm.filter(
+            pl.col('TD'),
+            pl.col('fdr_group') == fdr_group
+        )
+        df_csm_dd = df_csm.filter(
+            pl.col('DD'),
+            pl.col('fdr_group') == fdr_group
+        )
         if len(df_csm_tt)*csm_fdr < td_prob:
             warnings.warn(f'Insufficient TT for CSM FDR in group {fdr_group}.')
+            df_csm = df_csm.filter(pl.col('fdr_group') != fdr_group)
+        if len(df_csm_dd) > len(df_csm_td):
+            warnings.warn(f'More DD than TD for CSM FDR in group {fdr_group}.')
             df_csm = df_csm.filter(pl.col('fdr_group') != fdr_group)
     return df_csm
 
@@ -207,8 +218,19 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob):
             pl.col('TT'),
             pl.col('fdr_group') == fdr_group
         )
+        df_pep_td = df_pep.filter(
+            pl.col('TD'),
+            pl.col('fdr_group') == fdr_group
+        )
+        df_pep_dd = df_pep.filter(
+            pl.col('DD'),
+            pl.col('fdr_group') == fdr_group
+        )
         if len(df_pep_tt)*pep_fdr < td_prob:
             warnings.warn(f'Insufficient TT for Peptide FDR in group {fdr_group}.')
+            df_pep = df_pep.filter(pl.col('fdr_group') != fdr_group)
+        if len(df_pep_dd) > len(df_pep_td):
+            warnings.warn(f'More DD than TD for Peptide FDR in group {fdr_group}.')
             df_pep = df_pep.filter(pl.col('fdr_group') != fdr_group)
     return df_pep
 
@@ -363,8 +385,19 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob):
             pl.col('TT'),
             pl.col('fdr_group') == fdr_group
         )
+        df_link_td = df_link.filter(
+            pl.col('TD'),
+            pl.col('fdr_group') == fdr_group
+        )
+        df_link_dd = df_link.filter(
+            pl.col('DD'),
+            pl.col('fdr_group') == fdr_group
+        )
         if len(df_link_tt)*link_fdr < td_prob:
             warnings.warn(f'Insufficient TT for link FDR in group {fdr_group}.')
+            df_link = df_link.filter(pl.col('fdr_group') != fdr_group)
+        if len(df_link_dd) > len(df_link_td):
+            warnings.warn(f'More DD than TD for link FDR in group {fdr_group}.')
             df_link = df_link.filter(pl.col('fdr_group') != fdr_group)
     return df_link
 
@@ -412,8 +445,19 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob):
             pl.col('TT'),
             pl.col('fdr_group') == fdr_group
         )
+        df_ppi_td = df_ppi.filter(
+            pl.col('TD'),
+            pl.col('fdr_group') == fdr_group
+        )
+        df_ppi_dd = df_ppi.filter(
+            pl.col('DD'),
+            pl.col('fdr_group') == fdr_group
+        )
         if len(df_ppi_tt)*ppi_fdr < td_prob:
             warnings.warn(f'Insufficient TT for link FDR in group {fdr_group}.')
+            df_ppi = df_ppi.filter(pl.col('fdr_group') != fdr_group)
+        if len(df_ppi_dd) > len(df_ppi_td):
+            warnings.warn(f'More DD than TD for link FDR in group {fdr_group}.')
             df_ppi = df_ppi.filter(pl.col('fdr_group') != fdr_group)
     return df_ppi
 
