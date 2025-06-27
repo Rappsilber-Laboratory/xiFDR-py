@@ -72,3 +72,10 @@ linear or self-link matches and proteins with self-link or linear matches additi
 .. [#selfbetween] Homomeric links sometimes refer to links explicitly within a single molecule of a protein.
     As we usually don't know whether the link is within one molecule or between multiple molecule of the same protein,
     we rather use the nomenclature of self- and between-links.
+
+Validity checks
+---------------
+
+For some datasets, very low FDR cutoffs may result in too little data coming through. This may make confidnent FDR
+estimation impossible. To avoid this, we check if the number of target-target matches results in a minimum number of
+decoys ``td_prob`` to be observed (statistically).

@@ -21,6 +21,8 @@ def boost(df: pl.DataFrame,
           neg_boost_cols: list = [],
           boost_level: str = "ppi",
           boost_between: bool = True,
+          td_prob: int = 2,
+          td_prot_prob: int = 10,
           method: str = "manhattan",
           countdown: int = 3,
           points: int = 5,
@@ -46,6 +48,10 @@ def boost(df: pl.DataFrame,
         FDR level tp boost for
     boost_between
         Whether to boost for between links
+    td_prob
+        Minimum theoretical TD machtes for the FDR levels (except protein level)
+    td_prot_prob
+        Minimum theoretical TD machtes for the protein FDR level
     method
         Search algorithm to use
     countdown
@@ -83,6 +89,8 @@ def boost(df: pl.DataFrame,
             neg_boost_cols=neg_boost_cols,
             boost_level=boost_level,
             boost_between=boost_between,
+            td_prob=td_prob,
+            td_prot_prob=td_prot_prob,
             countdown=countdown,
             points=points,
             n_jobs=n_jobs
@@ -113,6 +121,8 @@ def boost_manhattan(df: pl.DataFrame,
                     neg_boost_cols: list = [],
                     boost_level: str = "ppi",
                     boost_between: bool = True,
+                    td_prob: int = 2,
+                    td_prot_prob: int = 10,
                     countdown: int = 3,
                     points: int = 3,
                     n_jobs: int = 1):
@@ -136,6 +146,8 @@ def boost_manhattan(df: pl.DataFrame,
                 neg_boost_cols=neg_boost_cols,
                 boost_level=boost_level,
                 boost_between=boost_between,
+                td_prob=td_prob,
+                td_prot_prob=td_prot_prob,
             ),
             ranges=start_params,
             countdown=countdown,
@@ -217,7 +229,9 @@ def _optimization_template(cutoffs,
                            boost_cols: list = [],
                            neg_boost_cols: list = [],
                            boost_level: str = "ppi",
-                           boost_between: bool = True):
+                           boost_between: bool = True,
+                           td_prob: int = 2,
+                           td_prot_prob: int = 10):
     fdrs = cutoffs[:5]
     col_levels = cutoffs[5:]
     neg_col_levels = col_levels[len(boost_cols):]
@@ -237,8 +251,12 @@ def _optimization_template(cutoffs,
                     (pl.col(c).max()-pl.col(c).min())
             ) <= neg_col_levels[i]
         )
-
-    result = full_fdr(df, *fdrs, prepare_column=False)[boost_level]
+    result = full_fdr(
+        df, *fdrs,
+        prepare_column=False,
+        td_prob=td_prob,
+        td_prot_prob=td_prot_prob
+    )[boost_level]
     if boost_between:
         result = result.filter(col('fdr_group') == 'between')
     tt = len(result.filter(col('TT')))
