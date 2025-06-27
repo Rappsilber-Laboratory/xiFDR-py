@@ -86,3 +86,43 @@ def test_java_xifdr():
     }
     mapping = guess_column_names(columns)
     assert expected_mapping == mapping
+
+def test_static_mapping_override():
+    columns = [
+        'match_score', 'sequenceA', 'sequenceB', 'precursor_charge',
+        'startA', 'startB', 'linkA', 'linkB',
+        'proteinA', 'proteinB', 'decoyA', 'decoyB',
+        'fdr_group'
+    ]
+    static_mapping = {
+        'sequenceA': 'sequence_p1',
+        'sequenceB': 'sequence_p2',
+        'startA': 'start_pos_p1',
+        'startB': 'start_pos_p2',
+        'linkA': 'link_pos_p1',
+        'linkB': 'link_pos_p2',
+        'proteinA': 'protein_p1',
+        'proteinB': 'protein_p2',
+        'decoyA': 'decoy_p1',
+        'decoyB': 'decoy_p2',
+    }
+
+    mapping = guess_column_names(columns, static_mapping=static_mapping)
+
+    expected_mapping = {
+        'sequenceA': 'sequence_p1',
+        'sequenceB': 'sequence_p2',
+        'startA': 'start_pos_p1',
+        'startB': 'start_pos_p2',
+        'linkA': 'link_pos_p1',
+        'linkB': 'link_pos_p2',
+        'proteinA': 'protein_p1',
+        'proteinB': 'protein_p2',
+        'decoyA': 'decoy_p1',
+        'decoyB': 'decoy_p2',
+        'match_score': 'score',
+        'precursor_charge': 'charge',
+        'fdr_group': 'fdr_group',
+    }
+
+    assert mapping == expected_mapping
