@@ -1,25 +1,41 @@
 import re
 import warnings
 
-def guess_column_names(columns: list[str]):
-    name_mapping = dict()
-    name_mapping[_guess_score(columns)] = 'score'
-    name_mapping[_guess_sequence(columns)[0]] = 'sequence_p1'
-    name_mapping[_guess_sequence(columns)[1]] = 'sequence_p2'
-    name_mapping[_guess_start_pos(columns)[0]] = 'start_pos_p1'
-    name_mapping[_guess_start_pos(columns)[1]] = 'start_pos_p2'
-    name_mapping[_guess_link_pos(columns)[0]] = 'link_pos_p1'
-    name_mapping[_guess_link_pos(columns)[1]] = 'link_pos_p2'
-    name_mapping[_guess_charge(columns)] = 'charge'
-    name_mapping[_guess_protein(columns)[0]] = 'protein_p1'
-    name_mapping[_guess_protein(columns)[1]] = 'protein_p2'
-    name_mapping[_guess_decoy(columns)[0]] = 'decoy_p1'
-    name_mapping[_guess_decoy(columns)[1]] = 'decoy_p2'
-    name_mapping[_guess_fdr_group(columns)] = 'fdr_group'
-    coverage_guess = _guess_coverage(columns)
-    if coverage_guess:
-        name_mapping[coverage_guess[0]] = 'coverage_p1'
-        name_mapping[coverage_guess[1]] = 'coverage_p2'
+def guess_column_names(columns:list[str], static_mapping:dict = None):
+    name_mapping = static_mapping.copy() if static_mapping else {}
+    if 'score' not in name_mapping.values():
+        name_mapping[_guess_score(columns)] = 'score'
+    if 'sequence_p1' not in name_mapping.values():
+        name_mapping[_guess_sequence(columns)[0]] = 'sequence_p1'
+    if 'sequence_p2' not in name_mapping.values():
+        name_mapping[_guess_sequence(columns)[1]] = 'sequence_p2'
+    if 'start_pos_p1' not in name_mapping.values():
+        name_mapping[_guess_start_pos(columns)[0]] = 'start_pos_p1'
+    if 'start_pos_p2' not in name_mapping.values():
+        name_mapping[_guess_start_pos(columns)[1]] = 'start_pos_p2'
+    if 'link_pos_p1' not in name_mapping.values():
+        name_mapping[_guess_link_pos(columns)[0]] = 'link_pos_p1'
+    if 'link_pos_p2' not in name_mapping.values():
+        name_mapping[_guess_link_pos(columns)[1]] = 'link_pos_p2'
+    if 'charge' not in name_mapping.values():
+        name_mapping[_guess_charge(columns)] = 'charge'
+    if 'protein_p1' not in name_mapping.values():
+        name_mapping[_guess_protein(columns)[0]] = 'protein_p1'
+    if 'protein_p2' not in name_mapping.values():
+        name_mapping[_guess_protein(columns)[1]] = 'protein_p2'
+    if 'decoy_p1' not in name_mapping.values():
+        name_mapping[_guess_decoy(columns)[0]] = 'decoy_p1'
+    if 'decoy_p2' not in name_mapping.values():
+        name_mapping[_guess_decoy(columns)[1]] = 'decoy_p2'
+    if 'fdr_group' not in name_mapping.values():
+        name_mapping[_guess_fdr_group(columns)] = 'fdr_group'
+    if 'coverage_p1' not in name_mapping.values() or 'coverage_p2' not in name_mapping.values():
+        coverage_guess = _guess_coverage(columns)
+        if coverage_guess:
+            if 'coverage_p1' not in name_mapping.values():
+                name_mapping[coverage_guess[0]] = 'coverage_p1'
+            if 'coverage_p2' not in name_mapping.values():
+                name_mapping[coverage_guess[1]] = 'coverage_p2'
     return name_mapping
 
 def _guess_score(columns: list[str]):
