@@ -32,6 +32,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
              prepare_column:bool = True,
              td_prob:int = 2,
              td_prot_prob:int = 10,
+             td_dd_ratio:float = 1.0,
              custom_aggs:dict = None) -> dict[str, pl.DataFrame]:
     """
     
@@ -61,6 +62,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         Minimum theoretical TD machtes for the FDR levels (except protein level)
     td_prot_prob
         Minimum theoretical TD machtes for the protein FDR level
+    td_dd_ratio
+        Minimum ratio of TD/DD
     custom_aggs
         Custom aggregation functions for the FDR levels
 
@@ -107,11 +110,11 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
     ]
     never_agg_cols += ['score', 'protein_score_p1', 'protein_score_p2']
 
-    df_csm = _csm_fdr(df, csm_fdr, unique_csm, td_prob)
+    df_csm = _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio)
 
     # Calculate peptide FDR and filter
     logger.debug('Calculate peptide FDR and filter')
-    df_pep = _pep_fdr(df_csm, aggs['pep'], pep_fdr, first_aggs, never_agg_cols, td_prob)
+    df_pep = _pep_fdr(df_csm, aggs['pep'], pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
 
     logger.debug('Calculate protein FDR and filter')
     df_prot = _prot_fdr(df_pep, aggs['prot'], prot_fdr, td_prot_prob)
@@ -121,11 +124,11 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
 
     # Calculate link FDR and cutoff
     logger.debug('Calculate link FDR and cutoff')
-    df_link = _link_fdr(df_pep, aggs['link'], link_fdr, first_aggs, never_agg_cols, td_prob)
+    df_link = _link_fdr(df_pep, aggs['link'], link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
 
     # Calculate PPI FDR
     logger.debug('Calculate PPI FDR')
-    df_ppi = _ppi_fdr(df_link, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols, td_prob)
+    df_ppi = _ppi_fdr(df_link, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
 
     # Back-fitler levels
     df_link = df_link.join(
@@ -163,7 +166,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         'ppi': df_ppi,
     }
 
-def _csm_fdr(df, csm_fdr, unique_csm, td_prob):
+def _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio):
     if unique_csm:
         df_csm = df.sort('score', descending=True).unique(subset=csm_cols, keep='first')
     else:
@@ -180,13 +183,24 @@ def _csm_fdr(df, csm_fdr, unique_csm, td_prob):
             pl.col('TT'),
             pl.col('fdr_group') == fdr_group
         )
+        df_csm_td = df_csm.filter(
+            pl.col('TD'),
+            pl.col('fdr_group') == fdr_group
+        )
+        df_csm_dd = df_csm.filter(
+            pl.col('DD'),
+            pl.col('fdr_group') == fdr_group
+        )
         if len(df_csm_tt)*csm_fdr < td_prob:
             warnings.warn(f'Insufficient TT for CSM FDR in group {fdr_group}.')
+            df_csm = df_csm.filter(pl.col('fdr_group') != fdr_group)
+        if len(df_csm_dd)*td_dd_ratio > len(df_csm_td):
+            warnings.warn(f'More DD than TD for CSM FDR in group {fdr_group}.')
             df_csm = df_csm.filter(pl.col('fdr_group') != fdr_group)
     return df_csm
 
 
-def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob):
+def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
     pep_merge_cols = [c for c in df_csm.columns if c not in pep_cols+never_agg_cols]
     df_pep = df_csm.group_by(pep_cols).agg(
         *first_aggs,
@@ -207,8 +221,19 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob):
             pl.col('TT'),
             pl.col('fdr_group') == fdr_group
         )
+        df_pep_td = df_pep.filter(
+            pl.col('TD'),
+            pl.col('fdr_group') == fdr_group
+        )
+        df_pep_dd = df_pep.filter(
+            pl.col('DD'),
+            pl.col('fdr_group') == fdr_group
+        )
         if len(df_pep_tt)*pep_fdr < td_prob:
-            warnings.warn(f'Insufficient TT for Peptide FDR in group {fdr_group}.')
+            warnings.warn(f'Insufficient TT for peptide FDR in group {fdr_group}.')
+            df_pep = df_pep.filter(pl.col('fdr_group') != fdr_group)
+        if len(df_pep_dd)*td_dd_ratio > len(df_pep_td):
+            warnings.warn(f'More DD than TD for peptide FDR in group {fdr_group}.')
             df_pep = df_pep.filter(pl.col('fdr_group') != fdr_group)
     return df_pep
 
@@ -342,7 +367,7 @@ def _prot_filter(df_pep, df_prot, decoy_adjunct):
     )
 
 
-def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob):
+def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
     link_merge_cols = [c for c in df_pep.columns if c not in link_cols+never_agg_cols]
     df_link = df_pep.filter(
         pl.col('fdr_group') != "linear" # Disregard linear peptides from here on
@@ -363,13 +388,24 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob):
             pl.col('TT'),
             pl.col('fdr_group') == fdr_group
         )
+        df_link_td = df_link.filter(
+            pl.col('TD'),
+            pl.col('fdr_group') == fdr_group
+        )
+        df_link_dd = df_link.filter(
+            pl.col('DD'),
+            pl.col('fdr_group') == fdr_group
+        )
         if len(df_link_tt)*link_fdr < td_prob:
             warnings.warn(f'Insufficient TT for link FDR in group {fdr_group}.')
+            df_link = df_link.filter(pl.col('fdr_group') != fdr_group)
+        if len(df_link_dd)*td_dd_ratio > len(df_link_td):
+            warnings.warn(f'More DD than TD for link FDR in group {fdr_group}.')
             df_link = df_link.filter(pl.col('fdr_group') != fdr_group)
     return df_link
 
 
-def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob):
+def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
     ppi_merge_cols = [c for c in df_link.columns if c not in ppi_cols+never_agg_cols]
     df_ppi = df_link.with_columns(
         protein_p1_join=pl.col('protein_p1').list.unique().list.sort().list.join(';'),
@@ -412,8 +448,19 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob):
             pl.col('TT'),
             pl.col('fdr_group') == fdr_group
         )
+        df_ppi_td = df_ppi.filter(
+            pl.col('TD'),
+            pl.col('fdr_group') == fdr_group
+        )
+        df_ppi_dd = df_ppi.filter(
+            pl.col('DD'),
+            pl.col('fdr_group') == fdr_group
+        )
         if len(df_ppi_tt)*ppi_fdr < td_prob:
-            warnings.warn(f'Insufficient TT for link FDR in group {fdr_group}.')
+            warnings.warn(f'Insufficient TT for PPI FDR in group {fdr_group}.')
+            df_ppi = df_ppi.filter(pl.col('fdr_group') != fdr_group)
+        if len(df_ppi_dd)*td_dd_ratio > len(df_ppi_td):
+            warnings.warn(f'More DD than TD for PPI FDR in group {fdr_group}.')
             df_ppi = df_ppi.filter(pl.col('fdr_group') != fdr_group)
     return df_ppi
 
