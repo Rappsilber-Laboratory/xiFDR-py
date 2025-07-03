@@ -113,7 +113,7 @@ def independent_gird(func,
                     best_params[param_index] + search_spreads[param_index]
                 )
                 grid[param_index] = np.unique(
-                    np.linspace(param_from, param_to, points)
+                    np.linspace(param_from, param_to, points)[::-1]  # Reverse to prefer the highest cutoff
                 ).tolist()
 
                 n_unique = len(grid[param_index])
