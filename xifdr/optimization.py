@@ -19,8 +19,9 @@ def manhattan(func,
     # Initialize search_spreads and best_params
     for r_from, r_to in ranges:
         r_spread = (r_to-r_from)/2
-        r_mid = r_from+r_spread
-        best_params += [r_mid]
+        # Start with 10% (=20%/2) above absolute minimum
+        r_init = r_from+(r_spread*0.20)
+        best_params += [r_init]
         search_spreads += [r_spread]
 
     func_wrapped = ManhattanWrapper(func, args, kwargs)
