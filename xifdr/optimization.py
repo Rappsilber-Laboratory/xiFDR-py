@@ -11,6 +11,8 @@ def manhattan(func,
               points:int = 5,
               workers:int = 1,
               countdown:int = 3):
+    if points < 3:
+        raise OptimizerOptionsError('At least 3 parameter points are required.')
     param_index:int = 0
     n_params:int = len(ranges)
     best_params = []
@@ -18,9 +20,11 @@ def manhattan(func,
     search_spreads = []
     # Initialize search_spreads and best_params
     for r_from, r_to in ranges:
-        r_spread = (r_to-r_from)/2
-        # Start with 10% (=20%/2) above absolute minimum
-        r_init = r_from+(r_spread*0.20)
+        r_spread = (r_to-r_from)
+        if r_spread < 0:
+            raise OptimizerOptionsError('Start or search range must be less or equal to stop.')
+        # Start with 10% above absolute minimum
+        r_init = r_from+(r_spread*0.10)
         best_params += [r_init]
         search_spreads += [r_spread]
 
@@ -164,7 +168,6 @@ def independent_gird(func,
     return best_params, best_result
 
 
-
 class ManhattanWrapper:
     def __init__(self, f, args, kwargs):
         self.f = f
@@ -174,3 +177,8 @@ class ManhattanWrapper:
     def __call__(self, x):
         # flatten needed for one dimensional case.
         return self.f(np.asarray(x).flatten(), *self.args, **self.kwargs)
+
+
+class OptimizerOptionsError(Exception):
+    def __init__(self, message="Options are invalid."):
+        super().__init__(message)
