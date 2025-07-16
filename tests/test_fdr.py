@@ -142,6 +142,28 @@ def test_full_fdr():
     )
     pass
 
+
+def test_len_filter():
+    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    x = full_fdr(
+        samples,
+        csm_fdr=1.0,
+        pep_fdr=1.0,
+        prot_fdr=1.0,
+        link_fdr=1.0,
+        ppi_fdr=1.0,
+        unique_csm=False,
+        min_len=8
+    )
+    assert len(x['csm']) < len(samples)
+    assert x['csm']['sequence_p1'].str.replace_all(
+        '[^A-Z]', ''
+    ).str.len_chars().max() >= 8
+    assert x['csm']['sequence_p2'].str.replace_all(
+        '[^A-Z]', ''
+    ).str.len_chars().max() >= 8
+    pass
+
 def test_full_fdr_linear():
     samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
     samples = samples.with_columns(
