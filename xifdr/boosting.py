@@ -17,6 +17,8 @@ def boost(df: pl.DataFrame,
           prot_fdr: (float, float) = (0.0, 1.0),
           link_fdr: (float, float) = (0.0, 1.0),
           ppi_fdr: (float, float) = (0.0, 1.0),
+          boost_cols: list = [],
+          neg_boost_cols: list = [],
           boost_level: str = "ppi",
           boost_between: bool = True,
           td_prob: int = 2,
@@ -83,6 +85,8 @@ def boost(df: pl.DataFrame,
             prot_fdr=prot_fdr,
             link_fdr=link_fdr,
             ppi_fdr=ppi_fdr,
+            boost_cols=boost_cols,
+            neg_boost_cols=neg_boost_cols,
             boost_level=boost_level,
             boost_between=boost_between,
             td_prob=td_prob,
@@ -113,6 +117,8 @@ def boost_manhattan(df: pl.DataFrame,
                     prot_fdr: (float, float) = (0.0, 1.0),
                     link_fdr: (float, float) = (0.0, 1.0),
                     ppi_fdr: (float, float) = (0.0, 1.0),
+                    boost_cols: list = [],
+                    neg_boost_cols: list = [],
                     boost_level: str = "ppi",
                     boost_between: bool = True,
                     td_prob: int = 2,
@@ -128,11 +134,16 @@ def boost_manhattan(df: pl.DataFrame,
         link_fdr,
         ppi_fdr
     )
+    start_params += tuple((0.0, 1.0) for _ in boost_cols)
+    start_params += tuple((0.0, 1.0) for _ in neg_boost_cols)
+
     with closing(get_context('spawn').Pool(n_jobs)) as pool:
         best_params, result = manhattan(
             _optimization_template,
             kwargs=dict(
                 df=df,
+                boost_cols=boost_cols,
+                neg_boost_cols=neg_boost_cols,
                 boost_level=boost_level,
                 boost_between=boost_between,
                 td_prob=td_prob,
@@ -213,12 +224,33 @@ def boost_rec_brute(df: pl.DataFrame,
     return best_params
 
 
-def _optimization_template(fdrs,
+def _optimization_template(cutoffs,
                            df: pl.DataFrame,
+                           boost_cols: list = [],
+                           neg_boost_cols: list = [],
                            boost_level: str = "ppi",
                            boost_between: bool = True,
                            td_prob: int = 2,
                            td_prot_prob: int = 10):
+    fdrs = cutoffs[:5]
+    col_levels = cutoffs[5:]
+    neg_col_levels = col_levels[len(boost_cols):]
+
+    for i, c in enumerate(boost_cols):
+        df = df.filter(
+            (
+                    (pl.col(c)-pl.col(c).min()) /
+                    (pl.col(c).max()-pl.col(c).min())
+            ) >= col_levels[i]
+        )
+
+    for i, c in enumerate(neg_boost_cols):
+        df = df.filter(
+            (
+                    (pl.col(c)-pl.col(c).min()) /
+                    (pl.col(c).max()-pl.col(c).min())
+            ) <= neg_col_levels[i]
+        )
     result = full_fdr(
         df, *fdrs,
         prepare_column=False,
@@ -233,6 +265,6 @@ def _optimization_template(fdrs,
     tp = tt - td + dd
     logger.debug(
         f'Estimated true positive matches: {tp}\n'
-        f'Parameters: {fdrs}'
+        f'Parameters: {cutoffs}'
     )
     return -tp

@@ -46,6 +46,7 @@ def manhattan(func,
                 x[:n_unique] for x in grid
             ]
             grid = np.transpose(grid)
+            # Run parameters
             results = list(mapper(func_wrapped, grid))
             top_index = np.argmin(results)
             top_run = results[top_index]
