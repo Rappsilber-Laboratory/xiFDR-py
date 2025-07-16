@@ -26,6 +26,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
              prot_fdr:float = 1.0,
              link_fdr:float = 1.0,
              ppi_fdr:float = 1.0,
+             min_len:int = 5,
              decoy_adjunct:str = 'REV_',
              unique_csm:bool = True,
              filter_back:bool = True,
@@ -50,6 +51,8 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         Link level FDR cutoff
     ppi_fdr
         Protein pair level FDR cutoff
+    min_len
+        Minimum peptide sequence length
     decoy_adjunct
         Prefix/Suffix indicating a decoy match
     unique_csm
@@ -82,6 +85,12 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
 
     if prepare_column:
         df = prepare_columns(df)
+
+    # Filter CSMs for minimum peptide length
+    df = df.filter(
+        pl.col('sequence_p1').str.replace_all('[^A-Z]', '').str.len_chars() >= min_len,
+        pl.col('sequence_p2').str.replace_all('[^A-Z]', '').str.len_chars() >= min_len,
+    )
 
     # Check for required columns
     required_columns = [
