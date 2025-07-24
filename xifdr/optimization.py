@@ -16,11 +16,16 @@ def manhattan(func,
     best_params = []
     best_result = None
     search_spreads = []
-    # Initialize search_spreads and best_params
-    for r_from, r_to in ranges:
+    # Initialize search_spreads and best_params for FDR levels
+    for r_from, r_to in ranges[:5]:
         r_spread = (r_to-r_from)/2
         r_mid = r_from+r_spread
         best_params += [r_mid]
+        search_spreads += [r_spread]
+    # Initialize search_spreads and best_params for pre-filters
+    for r_from, r_to in ranges[5:]:
+        r_spread = (r_to-r_from)/2
+        best_params += [1.0]
         search_spreads += [r_spread]
 
     func_wrapped = ManhattanWrapper(func, args, kwargs)
