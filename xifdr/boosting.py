@@ -305,44 +305,44 @@ def _optimization_template(cutoffs,
 
 
 
-def get_initial_knees(df,
-                      min_len,
-                      td_prob,
-                      td_prot_prob,
-                      unique_csm,
-                      boost_between,
-                      ranges: tuple[tuple[float]],
-                      args=(),
-                      kwargs={},
-                      points:int = 10,
-                      workers:int = 1,):
-    start_params = [1.0, 1.0, 1.0, 1.0, 1.0]
-    for i, level in enumerate(['csm', 'pep', 'prot', 'link', 'ppi']):
-        with closing(get_context('spawn').Pool(workers)) as pool:
-            _optimization_template(
-                start_params,
-                df,
-                min_len,
-                unique_csm,
-                [],
-                [],
-                level,
-                boost_between,
-                td_prob,
-                td_prot_prob,
-            )
-            best_params, result = manhattan(
-                _optimization_template,
-                kwargs=dict(
-                    df=df,
-                    min_len=min_len,
-                    unique_csm=unique_csm,
-                    boost_level=level,
-                    boost_between=boost_between,
-                    td_prob=td_prob,
-                    td_prot_prob=td_prot_prob,
-                ),
-                ranges=start_params,
-                points=points,
-                workers=pool.map,
-            )
+# def get_initial_knees(df,
+#                       min_len,
+#                       td_prob,
+#                       td_prot_prob,
+#                       unique_csm,
+#                       boost_between,
+#                       ranges: tuple[tuple[float]],
+#                       args=(),
+#                       kwargs={},
+#                       points:int = 10,
+#                       workers:int = 1,):
+#     start_params = [1.0, 1.0, 1.0, 1.0, 1.0]
+#     for i, level in enumerate(['csm', 'pep', 'prot', 'link', 'ppi']):
+#         with closing(get_context('spawn').Pool(workers)) as pool:
+#             _optimization_template(
+#                 start_params,
+#                 df,
+#                 min_len,
+#                 unique_csm,
+#                 [],
+#                 [],
+#                 level,
+#                 boost_between,
+#                 td_prob,
+#                 td_prot_prob,
+#             )
+#             best_params, result = manhattan(
+#                 _optimization_template,
+#                 kwargs=dict(
+#                     df=df,
+#                     min_len=min_len,
+#                     unique_csm=unique_csm,
+#                     boost_level=level,
+#                     boost_between=boost_between,
+#                     td_prob=td_prob,
+#                     td_prot_prob=td_prot_prob,
+#                 ),
+#                 ranges=start_params,
+#                 points=points,
+#                 workers=pool.map,
+#             )
