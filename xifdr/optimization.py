@@ -60,7 +60,7 @@ def manhattan(func,
             # Run parameters
             results = list(mapper(func_wrapped, grid))
             top_indices = np.argwhere(results == np.min(results))
-            top_index = top_indices[(len(top_indices)-1)//2]
+            top_index = top_indices[(len(top_indices)-1)//2][0]
             top_run = results[top_index]
             top_params = grid[top_index]
             if best_result is None or top_run < best_result:
