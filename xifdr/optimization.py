@@ -22,10 +22,16 @@ def manhattan(func,
         r_mid = r_from+r_spread
         best_params += [r_mid]
         search_spreads += [r_spread]
-    # Initialize search_spreads and best_params for pre-filters
-    for r_from, r_to in ranges[5:]:
+    # Initialize search_spreads and best_params for boost columns
+    n_bcol=len(kwargs['boost_cols'])
+    for r_from, r_to in ranges[5:5+n_bcol]:
         r_spread = (r_to-r_from)/2
         best_params += [1.0]
+        search_spreads += [r_spread]
+    # Initialize search_spreads and best_params for neg boost columns
+    for r_from, r_to in ranges[5+n_bcol:]:
+        r_spread = (r_to-r_from)/2
+        best_params += [0.0]
         search_spreads += [r_spread]
 
     func_wrapped = ManhattanWrapper(func, args, kwargs)
