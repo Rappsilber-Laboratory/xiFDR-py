@@ -25,6 +25,7 @@ def boost(df: pl.DataFrame,
           boost_between: bool = True,
           td_prob: int = 2,
           td_prot_prob: int = 10,
+          td_dd_ratio: float = 1.0,
           method: str = "manhattan",
           countdown: int = 3,
           points: int = 5,
@@ -56,6 +57,8 @@ def boost(df: pl.DataFrame,
         Minimum theoretical TD machtes for the FDR levels (except protein level)
     td_prot_prob
         Minimum theoretical TD machtes for the protein FDR level
+    td_dd_ratio
+        Minimum ratio of TD/DD
     method
         Search algorithm to use
     countdown
@@ -99,6 +102,7 @@ def boost(df: pl.DataFrame,
             boost_between=boost_between,
             td_prob=td_prob,
             td_prot_prob=td_prot_prob,
+            td_dd_ratio=td_dd_ratio,
             countdown=countdown,
             points=points,
             n_jobs=n_jobs
@@ -135,6 +139,7 @@ def boost_manhattan(df: pl.DataFrame,
                     boost_between: bool = True,
                     td_prob: int = 2,
                     td_prot_prob: int = 10,
+                    td_dd_ratio: float = 1.0,
                     countdown: int = 3,
                     points: int = 3,
                     n_jobs: int = 1):
@@ -162,6 +167,7 @@ def boost_manhattan(df: pl.DataFrame,
                 boost_between=boost_between,
                 td_prob=td_prob,
                 td_prot_prob=td_prot_prob,
+                td_dd_ratio=td_dd_ratio,
             ),
             ranges=start_params,
             countdown=countdown,
@@ -255,7 +261,8 @@ def _optimization_template(cutoffs,
                            boost_level: str = "ppi",
                            boost_between: bool = True,
                            td_prob: int = 2,
-                           td_prot_prob: int = 10):
+                           td_prot_prob: int = 10,
+                           td_dd_ratio: float = 1.0):
     fdrs = cutoffs[:5]
     col_levels = cutoffs[5:]
     neg_col_levels = col_levels[len(boost_cols):]
@@ -281,7 +288,8 @@ def _optimization_template(cutoffs,
         unique_csm=unique_csm,
         prepare_column=False,
         td_prob=td_prob,
-        td_prot_prob=td_prot_prob
+        td_prot_prob=td_prot_prob,
+        td_dd_ratio=td_dd_ratio
     )[boost_level]
     if boost_between:
         result = result.filter(col('fdr_group') == 'between')
@@ -294,3 +302,47 @@ def _optimization_template(cutoffs,
         f'Parameters: {cutoffs}'
     )
     return -tp
+
+
+
+def get_initial_knees(df,
+                      min_len,
+                      td_prob,
+                      td_prot_prob,
+                      unique_csm,
+                      boost_between,
+                      ranges: tuple[tuple[float]],
+                      args=(),
+                      kwargs={},
+                      points:int = 10,
+                      workers:int = 1,):
+    start_params = [1.0, 1.0, 1.0, 1.0, 1.0]
+    for i, level in enumerate(['csm', 'pep', 'prot', 'link', 'ppi']):
+        with closing(get_context('spawn').Pool(workers)) as pool:
+            _optimization_template(
+                start_params,
+                df,
+                min_len,
+                unique_csm,
+                [],
+                [],
+                level,
+                boost_between,
+                td_prob,
+                td_prot_prob,
+            )
+            best_params, result = manhattan(
+                _optimization_template,
+                kwargs=dict(
+                    df=df,
+                    min_len=min_len,
+                    unique_csm=unique_csm,
+                    boost_level=level,
+                    boost_between=boost_between,
+                    td_prob=td_prob,
+                    td_prot_prob=td_prot_prob,
+                ),
+                ranges=start_params,
+                points=points,
+                workers=pool.map,
+            )
