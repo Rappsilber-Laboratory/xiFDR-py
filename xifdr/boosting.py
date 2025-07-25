@@ -113,7 +113,7 @@ def boost_manhattan(df: pl.DataFrame,
 
     # Figure out knee points for starting
     df = prepare_columns(df)
-    knee_points = find_knees(df.filter(pl.col ('fdr_group') == 'between'))
+    knee_points = find_knees(df.filter(pl.col ('fdr_group') == 'between'), **kwargs)
     for i, p in enumerate(knee_points):
         best_params[i] = p
         # Clip to param max
@@ -150,7 +150,8 @@ def boost_manhattan(df: pl.DataFrame,
     )
 
     n_params = len(param_ranges)
-    best_result = None
+    best_result = opt_wrapper(best_params)
+    logger.info(f'Initial result ({best_result}) for params: {best_params}')
     with closing(get_context('spawn').Pool(n_jobs)) as pool:
         while True:
             grids = []
