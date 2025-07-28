@@ -219,15 +219,18 @@ def boost_manhattan(df: pl.DataFrame,
                     top_params[grid_i] = grid_top_params[grid_i]
             top_result = min(grid_top_results)
             if best_result is None or top_result < best_result:
+                param_diff = np.abs(np.array(best_params)-np.array(top_params))
+                search_spreads[param_diff!=0] = param_diff[param_diff!=0] * 2
                 best_result = top_result
                 best_params = top_params
                 current_countdown = countdown
                 logger.info(f'Better score found ({best_result}) for params: {best_params}')
             else:
-                current_countdown -= 1
-                logger.info(f'No improvement for iteration. Countdown: {current_countdown}')
+                search_spreads *= np.multiply(search_spreads, .8)
                 if current_countdown == 0:
                     break
+                current_countdown -= 1
+                logger.info(f'No improvement for iteration. Countdown: {current_countdown}')
             search_spreads *= np.multiply(search_spreads, .8)
 
     return best_params
