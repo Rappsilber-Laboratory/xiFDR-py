@@ -1,3 +1,4 @@
+import numpy as np
 import polars as pl
 from polars import col
 
@@ -183,8 +184,20 @@ def prepare_columns(df):
         ).then(pl.lit('TT')).otherwise(pl.lit('TD'))
     )
 
-    # Make score positive
-    df = df.with_columns(col('score') - col('score').min())
+    # Fill in infinite scores
+    max_score = df.filter(pl.col('score') < np.inf)['score'].max()
+    min_score = df.filter(pl.col('score') > -np.inf)['score'].min()
+    inf_margin = (max_score-min_score)*0.1
+    df = df.with_columns(col('score') - min_score + inf_margin)
+    df = df.with_columns(
+        score=pl.when(pl.col('score') == np.inf).then(
+            pl.lit(max_score) + 2*pl.col(inf_margin)
+        ).when(pl.col('score') == -np.inf).then(
+            pl.lit(0)
+        ).otherwise(
+            pl.col('score')
+        )
+    )
 
     # Put in dummy coverage if none provided
     if 'coverage_p1' not in df.columns or 'coverage_p2' not in df.columns:
