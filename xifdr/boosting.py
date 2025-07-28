@@ -297,15 +297,5 @@ def _optimization_template(cutoffs,
             dd_prob_bad = gl_dd*td_dd_ratio > gl_td
             if td_prob_bad or dd_prob_bad:
                 return -tp/df.height
-    # Check for probabilities on linear
-    for li, l in [(0, 'csm'), (1, 'pep')]:
-        gl_df = result_all[l].filter(pl.col('fdr_group')=='linear')
-        gl_tt = gl_df.filter('TT').height
-        gl_td = gl_df.filter('TD').height
-        gl_dd = gl_df.filter('DD').height
-        td_prob_bad = gl_tt*cutoffs[li] < td_prob
-        dd_prob_bad = gl_dd*td_dd_ratio > gl_td
-        if td_prob_bad or dd_prob_bad:
-            return -tp/df.height
 
     return -tp
