@@ -136,10 +136,10 @@ def boost_manhattan(df: pl.DataFrame,
         best_params += [1]
 
     # Init spreads
-    search_spreads = []
+    search_spreads = np.array([])
     for r_from, r_to in param_ranges:
         r_spread = (r_to-r_from)/2
-        search_spreads += [r_spread]
+        search_spreads = np.append(search_spreads, [r_spread])
 
     opt_wrapper = partial(
         _optimization_template,
@@ -226,12 +226,12 @@ def boost_manhattan(df: pl.DataFrame,
                 current_countdown = countdown
                 logger.info(f'Better score found ({best_result}) for params: {best_params}')
             else:
-                search_spreads *= np.multiply(search_spreads, .8)
                 if current_countdown == 0:
                     break
+                search_spreads[search_spreads<0.05] *= countdown-current_countdown+2
+                search_spreads[search_spreads>=0.05] *= .8
                 current_countdown -= 1
                 logger.info(f'No improvement for iteration. Countdown: {current_countdown}')
-            search_spreads *= np.multiply(search_spreads, .8)
 
     return best_params
 
