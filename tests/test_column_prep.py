@@ -39,12 +39,12 @@ def test_column_prep():
         ['ABC', 'AAA', 'GHI'],  # sequence_p2
         [False, False, True],  # decoy_p1
         [False, True, True],  # decoy_p2
-        [0, 1, 2],  # score
+        [0.2, 1.2, 2.2],  # score
         ['TT', 'TD', 'DD'],  # decoy_class
         [[7], [2, 3], [9, 10]],  # cl_pos_p1
         [[1], [8, 8, 9], [3, 4, 5]],  # cl_pos_p2
-        [0.0, .5, 1],  #  protein_score_p1
-        [0.0, .5, 1],  #  protein_score_p2
+        [0.1, .6, 1.1],  #  protein_score_p1
+        [0.1, .6, 1.1],  #  protein_score_p2
         [.5, .5, .5],  # coverage_p1
         [.5, .5, .5],  # coverage_p2
         [True, False, False],  # TT
