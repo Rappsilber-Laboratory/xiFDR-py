@@ -1,5 +1,7 @@
+import os
 from functools import partial
 import logging
+import psutil
 
 import numpy as np
 from polars import col
@@ -152,6 +154,12 @@ def boost_manhattan(df: pl.DataFrame,
     n_params = len(param_ranges)
     best_result = opt_wrapper(best_params)
     logger.info(f'Initial result ({best_result}) for params: {best_params}')
+    current_countdown = countdown
+    if n_jobs <= 0:
+        max_mem_cpu = int(psutil.virtual_memory().available // df.estimated_size())
+        n_jobs = max(max_mem_cpu, 1)
+        n_jobs = min(n_jobs, os.cpu_count())
+        logger.info(f"Using {n_jobs} CPUs based on available memory.")
     with closing(get_context('spawn').Pool(n_jobs)) as pool:
         while True:
             grids = []
@@ -235,7 +243,7 @@ def _optimization_template(cutoffs,
                            boost_between: bool = True,
                            td_prob: int = 2,
                            td_prot_prob: int = 10,
-                           td_dd_ratio: float = 1.0):
+                           td_dd_ratio: float = 1.0) -> float:
     fdrs = cutoffs[:5]
     col_levels = cutoffs[5:]
     neg_col_levels = col_levels[len(boost_cols):]
@@ -255,15 +263,16 @@ def _optimization_template(cutoffs,
                     (pl.col(c).max()-pl.col(c).min())
             ) <= neg_col_levels[i]
         )
-    result = full_fdr(
+    result_all = full_fdr(
         df, *fdrs,
         min_len=min_len,
         unique_csm=unique_csm,
         prepare_column=False,
-        td_prob=td_prob,
+        td_prob=0,
         td_prot_prob=td_prot_prob,
-        td_dd_ratio=td_dd_ratio
-    )[boost_level]
+        td_dd_ratio=0
+    )
+    result = result_all[boost_level]
     if boost_between:
         result = result.filter(col('fdr_group') == 'between')
     tt = len(result.filter(col('TT')))
@@ -274,4 +283,29 @@ def _optimization_template(cutoffs,
         f'Estimated true positive matches: {tp}\n'
         f'Parameters: {cutoffs}'
     )
+
+    # Check for probabilities. If the result does not match the TD/DD probabilities
+    # we return the result divided by the df size to indicate that this is better than
+    # nothing but should be dropped as soon as a proper result is found.
+    for li, l in [(0, 'csm'), (1, 'pep'), (3, 'link'), (4, 'ppi')]:
+        for g in ['self', 'between']:
+            gl_df = result_all[l].filter(pl.col('fdr_group')==g)
+            gl_tt = gl_df.filter('TT').height
+            gl_td = gl_df.filter('TD').height
+            gl_dd = gl_df.filter('DD').height
+            td_prob_bad = gl_tt*cutoffs[li] < td_prob
+            dd_prob_bad = gl_dd*td_dd_ratio > gl_td
+            if td_prob_bad or dd_prob_bad:
+                return -tp/df.height
+    # Check for probabilities on linear
+    for li, l in [(0, 'csm'), (1, 'pep')]:
+        gl_df = result_all[l].filter(pl.col('fdr_group')=='linear')
+        gl_tt = gl_df.filter('TT').height
+        gl_td = gl_df.filter('TD').height
+        gl_dd = gl_df.filter('DD').height
+        td_prob_bad = gl_tt*cutoffs[li] < td_prob
+        dd_prob_bad = gl_dd*td_dd_ratio > gl_td
+        if td_prob_bad or dd_prob_bad:
+            return -tp/df.height
+
     return -tp
