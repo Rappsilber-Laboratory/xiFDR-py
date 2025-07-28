@@ -31,14 +31,16 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     ----------
     df
         Input CSM dataframe
+    points
+        Resolution to find knees
+    poly_deg
+        Kneed polynome degree
     min_len
         Minimum peptide sequence length
     decoy_adjunct
         Prefix/Suffix indicating a decoy match
     unique_csm
         Make CSMs unique
-    filter_back
-        Filter lower levels to include only matches that also pass on higher levels
     prepare_column
         Perform preparation of aggregation columns like sorting ambiguous proteins and swapping protein 1/2
     td_prob
