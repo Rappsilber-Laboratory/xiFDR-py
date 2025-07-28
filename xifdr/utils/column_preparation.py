@@ -191,7 +191,7 @@ def prepare_columns(df):
     df = df.with_columns(col('score') - min_score + inf_margin)
     df = df.with_columns(
         score=pl.when(pl.col('score') == np.inf).then(
-            pl.lit(max_score) + 2*pl.col(inf_margin)
+            pl.lit(max_score) + 2*pl.lit(inf_margin)
         ).when(pl.col('score') == -np.inf).then(
             pl.lit(0)
         ).otherwise(
