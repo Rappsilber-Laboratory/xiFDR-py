@@ -137,8 +137,9 @@ def boost_manhattan(df: pl.DataFrame,
 
     # Init spreads
     search_spreads = np.array([])
-    for r_from, r_to in param_ranges:
+    for i, (r_from, r_to) in enumerate(param_ranges):
         r_spread = (r_to-r_from)/2
+        r_spread = min(best_params[i], r_spread)
         search_spreads = np.append(search_spreads, [r_spread])
 
     opt_wrapper = partial(
