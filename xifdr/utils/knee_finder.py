@@ -103,7 +103,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     never_agg_cols += ['score', 'protein_score_p1', 'protein_score_p2']
 
     df_csm = _csm_fdr(df, 1, unique_csm, td_prob, td_dd_ratio)
-    x = np.linspace(0, 1, points, endpoint=True)
+    x = np.linspace(0, 0.5, points, endpoint=True)
     y = np.array([
         df_csm.filter(pl.col('csm_fdr') <= _x).height
         for _x in x
@@ -125,7 +125,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     logger.debug('Calculate peptide FDR and filter')
     df_pep = _pep_fdr(df_csm, aggs['pep'], 1.0, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
 
-    x = np.linspace(0, 1, points, endpoint=True)
+    x = np.linspace(0, 0.5, points, endpoint=True)
     y = np.array([
         df_pep.filter(pl.col('pep_fdr') <= _x).height
         for _x in x
@@ -146,7 +146,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     # Calculate protein FDR and filter
     logger.debug('Calculate protein FDR and filter')
     df_prot = _prot_fdr(df_pep, aggs['prot'], 1.0, td_prot_prob)
-    x = np.linspace(0, 1, points, endpoint=True)
+    x = np.linspace(0, 0.5, points, endpoint=True)
     y = np.array([
         df_prot.filter(pl.col('prot_fdr') <= _x).height
         for _x in x
@@ -170,7 +170,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     # Calculate link FDR and cutoff
     logger.debug('Calculate link FDR and cutoff')
     df_link = _link_fdr(df_pep, aggs['link'], 1.0, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
-    x = np.linspace(0, 1, points, endpoint=True)
+    x = np.linspace(0, 0.5, points, endpoint=True)
     y = np.array([
         df_link.filter(pl.col('link_fdr') <= _x).height
         for _x in x
