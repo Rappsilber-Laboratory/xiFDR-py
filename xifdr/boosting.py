@@ -233,6 +233,7 @@ def boost_manhattan(df: pl.DataFrame,
                 search_spreads[search_spreads>=0.05] *= .8
                 current_countdown -= 1
                 logger.info(f'No improvement for iteration. Countdown: {current_countdown}')
+            logger.debug(f'New search spreads: {search_spreads}')
 
     return best_params
 
