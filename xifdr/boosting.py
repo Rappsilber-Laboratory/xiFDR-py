@@ -225,9 +225,9 @@ def boost_manhattan(df: pl.DataFrame,
                     search_spreads[param_diff!=0] = param_diff[param_diff!=0] * 2
                 else:
                     # Search wider while probabilities are not fulfilled
-                    min_point_dist = 0.01*points/2
-                    search_spreads[search_spreads<min_point_dist] *= countdown-current_countdown+2
-                    search_spreads[search_spreads>=min_point_dist] *= .8
+                    wide_spread_thresh = 20
+                    search_spreads[search_spreads<wide_spread_thresh] *= 2
+                    search_spreads[search_spreads>=wide_spread_thresh] *= .8
                 best_result = top_result
                 best_params = top_params
                 current_countdown = countdown
