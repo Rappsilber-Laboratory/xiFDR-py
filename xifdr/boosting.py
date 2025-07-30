@@ -224,14 +224,18 @@ def boost_manhattan(df: pl.DataFrame,
             if best_result is None or top_result < best_result:
                 param_diff = np.abs(np.array(best_params)-np.array(top_params))
                 search_spreads[param_diff!=0] = param_diff[param_diff!=0] * 2
-                if error_levels[grid_top_index] is not None:
-                    error_level = error_levels[grid_top_index]
-                    logger.debug(f'Level {error_level} did not pass the probability check.')
-                    search_spreads[error_level] *= 3
                 best_result = top_result
                 best_params = top_params
                 current_countdown = countdown
                 logger.info(f'Better score found ({best_result}) for params: {best_params}')
+                if error_levels[grid_top_index] is None:
+                    error_level = error_levels[grid_top_index]
+                    search_spreads[error_level] = best_params[error_level]*2
+                    best_params[error_level] *= 3
+                    logger.debug(
+                        f'Level {error_level} did not pass the probability check. '
+                        f'Push parameter to {best_params[error_level]}.'
+                    )
             else:
                 if current_countdown == 0:
                     break
