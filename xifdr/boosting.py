@@ -228,14 +228,6 @@ def boost_manhattan(df: pl.DataFrame,
                 best_params = top_params
                 current_countdown = countdown
                 logger.info(f'Better score found ({best_result}) for params: {best_params}')
-                if error_levels[grid_top_index] is None:
-                    error_level = error_levels[grid_top_index]
-                    search_spreads[error_level] = best_params[error_level]*2
-                    best_params[error_level] *= 3
-                    logger.debug(
-                        f'Level {error_level} did not pass the probability check. '
-                        f'Push parameter to {best_params[error_level]}.'
-                    )
             else:
                 if current_countdown == 0:
                     break
@@ -244,6 +236,14 @@ def boost_manhattan(df: pl.DataFrame,
                 search_spreads[search_spreads>=min_point_dist] *= .8
                 logger.info(f'No improvement for iteration. Countdown: {current_countdown}')
                 current_countdown -= 1
+            if error_levels[grid_top_index] is None:
+                error_level = error_levels[grid_top_index]
+                search_spreads[error_level] = best_params[error_level]*2
+                best_params[error_level] *= 3
+                logger.debug(
+                    f'Level {error_level} did not pass the probability check. '
+                    f'Push parameter to {best_params[error_level]}.'
+                )
             logger.debug(f'New search spreads: {search_spreads}')
 
     return best_params
