@@ -220,8 +220,14 @@ def boost_manhattan(df: pl.DataFrame,
                     top_params[grid_i] = grid_top_params[grid_i]
             top_result = min(grid_top_results)
             if best_result is None or top_result < best_result:
-                param_diff = np.abs(np.array(best_params)-np.array(top_params))
-                search_spreads[param_diff!=0] = param_diff[param_diff!=0] * 2
+                if top_result <= -1:
+                    param_diff = np.abs(np.array(best_params)-np.array(top_params))
+                    search_spreads[param_diff!=0] = param_diff[param_diff!=0] * 2
+                else:
+                    # Search wider while probabilities are not fulfilled
+                    min_point_dist = 0.01*points/2
+                    search_spreads[search_spreads<min_point_dist] *= countdown-current_countdown+2
+                    search_spreads[search_spreads>=min_point_dist] *= .8
                 best_result = top_result
                 best_params = top_params
                 current_countdown = countdown
