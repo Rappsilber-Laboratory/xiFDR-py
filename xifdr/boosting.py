@@ -229,8 +229,9 @@ def boost_manhattan(df: pl.DataFrame,
             else:
                 if current_countdown == 0:
                     break
-                search_spreads[search_spreads<0.05] *= countdown-current_countdown+2
-                search_spreads[search_spreads>=0.05] *= .8
+                min_point_dist = 0.001*points/2
+                search_spreads[search_spreads<min_point_dist] *= countdown-current_countdown+2
+                search_spreads[search_spreads>=min_point_dist] *= .8
                 current_countdown -= 1
                 logger.info(f'No improvement for iteration. Countdown: {current_countdown}')
             logger.debug(f'New search spreads: {search_spreads}')
