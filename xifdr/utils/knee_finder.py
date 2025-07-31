@@ -105,7 +105,10 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     df_csm = _csm_fdr(df, 1, unique_csm, td_prob, td_dd_ratio)
     x = np.linspace(0, 0.5, points, endpoint=True)
     y = np.array([
-        df_csm.filter(pl.col('csm_fdr') <= _x).height
+        df_csm.filter(
+            pl.col('csm_fdr') <= _x,
+            pl.col('TT')
+        ).height
         for _x in x
     ])
 
@@ -119,6 +122,15 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     if kn.all_knees and kn.find_knee()[0] > 0:
         csm_knee_fdr = kn.find_knee()[0]
 
+    # Try to fulfill probabilities
+    csm_knee_idx = np.argwhere(x==csm_knee_fdr)[0][0]
+    if y[csm_knee_idx]*csm_knee_fdr < td_prob:
+        while csm_knee_idx < points:
+            csm_knee_idx += 1
+            if y[csm_knee_idx] * csm_knee_fdr >= td_prob:
+                csm_knee_fdr = x[csm_knee_idx]
+                break
+
     df_csm = df_csm.filter(pl.col('csm_fdr') <= csm_knee_fdr)
 
     # Calculate peptide FDR and filter
@@ -127,7 +139,10 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
 
     x = np.linspace(0, 0.5, points, endpoint=True)
     y = np.array([
-        df_pep.filter(pl.col('pep_fdr') <= _x).height
+        df_pep.filter(
+            pl.col('pep_fdr') <= _x,
+            pl.col('TT')
+        ).height
         for _x in x
     ])
 
@@ -141,6 +156,15 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     if kn.all_knees and kn.find_knee()[0] > 0:
         pep_knee_fdr = kn.find_knee()[0]
 
+    # Try to fulfill probabilities
+    pep_knee_idx = np.argwhere(x==pep_knee_fdr)[0][0]
+    if y[pep_knee_idx]*pep_knee_fdr < td_prob:
+        while pep_knee_idx < points:
+            pep_knee_idx += 1
+            if y[pep_knee_idx] * pep_knee_fdr >= td_prob:
+                pep_knee_fdr = x[pep_knee_idx]
+                break
+
     df_pep = df_pep.filter(pl.col('pep_fdr') <= pep_knee_fdr)
 
     # Calculate protein FDR and filter
@@ -148,7 +172,10 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     df_prot = _prot_fdr(df_pep, aggs['prot'], 1.0, td_prot_prob)
     x = np.linspace(0, 0.5, points, endpoint=True)
     y = np.array([
-        df_prot.filter(pl.col('prot_fdr') <= _x).height
+        df_prot.filter(
+            pl.col('prot_fdr') <= _x,
+            pl.col('TT')
+        ).height
         for _x in x
     ])
 
@@ -162,6 +189,15 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     if kn.all_knees and kn.find_knee()[0] > 0:
         prot_knee_fdr = kn.find_knee()[0]
 
+    # Try to fulfill probabilities
+    prot_knee_idx = np.argwhere(x==prot_knee_fdr)[0][0]
+    if y[prot_knee_idx]*prot_knee_fdr < td_prot_prob:
+        while prot_knee_idx < points:
+            prot_knee_idx += 1
+            if y[prot_knee_idx] * prot_knee_fdr >= td_prot_prob:
+                prot_knee_fdr = x[prot_knee_idx]
+                break
+
     df_prot = df_prot.filter(pl.col('prot_fdr') <= prot_knee_fdr)
 
     logger.debug('Filter peptide pairs for passed proteins')
@@ -172,7 +208,10 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     df_link = _link_fdr(df_pep, aggs['link'], 1.0, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
     x = np.linspace(0, 0.5, points, endpoint=True)
     y = np.array([
-        df_link.filter(pl.col('link_fdr') <= _x).height
+        df_link.filter(
+            pl.col('link_fdr') <= _x,
+            pl.col('TT')
+        ).height
         for _x in x
     ])
 
@@ -185,5 +224,14 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     )
     if kn.all_knees and kn.find_knee()[0] > 0:
         link_knee_fdr = kn.find_knee()[0]
+
+    # Try to fulfill probabilities
+    link_knee_idx = np.argwhere(x==link_knee_fdr)[0][0]
+    if y[link_knee_idx]*link_knee_fdr < td_prob:
+        while link_knee_idx < points:
+            link_knee_idx += 1
+            if y[link_knee_idx] * link_knee_fdr >= td_prob:
+                link_knee_fdr = x[link_knee_idx]
+                break
 
     return (csm_knee_fdr, pep_knee_fdr, prot_knee_fdr, link_knee_fdr)
