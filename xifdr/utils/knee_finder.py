@@ -104,17 +104,31 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
 
     df_csm = _csm_fdr(df, 1, unique_csm, td_prob, td_dd_ratio)
     x = np.linspace(0, 0.5, points, endpoint=True)
-    y = np.array([
+    y_tt = np.array([
         df_csm.filter(
             pl.col('csm_fdr') <= _x,
             pl.col('TT')
         ).height
         for _x in x
     ])
+    y_td = np.array([
+        df_csm.filter(
+            pl.col('csm_fdr') <= _x,
+            pl.col('TD')
+        ).height
+        for _x in x
+    ])
+    y_dd = np.array([
+        df_csm.filter(
+            pl.col('csm_fdr') <= _x,
+            pl.col('DD')
+        ).height
+        for _x in x
+    ])
 
     csm_knee_fdr = 0.5
     kn = KneeLocator(
-        x, y,
+        x, y_tt,
         curve="concave",
         interp_method="polynomial",
         polynomial_degree=poly_deg
@@ -124,10 +138,14 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
 
     # Try to fulfill probabilities
     csm_knee_idx = np.argwhere(x==csm_knee_fdr)[0][0]
-    if y[csm_knee_idx]*csm_knee_fdr < td_prob:
+    td_prob_bad = y_tt[csm_knee_idx] * csm_knee_fdr >= td_prob
+    td_dd_prop_bad = y_dd[csm_knee_idx] * td_dd_ratio > y_td[csm_knee_idx]
+    if td_prob_bad or td_dd_prop_bad:
         while csm_knee_idx < points:
             csm_knee_idx += 1
-            if y[csm_knee_idx] * csm_knee_fdr >= td_prob:
+            td_prob_bad = y_tt[csm_knee_idx] * csm_knee_fdr >= td_prob
+            td_dd_prop_bad = y_dd[csm_knee_idx] * td_dd_ratio > y_td[csm_knee_idx]
+            if td_prob_bad or td_dd_prop_bad:
                 csm_knee_fdr = x[csm_knee_idx]
                 break
 
@@ -138,7 +156,21 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     df_pep = _pep_fdr(df_csm, aggs['pep'], 1.0, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
 
     x = np.linspace(0, 0.5, points, endpoint=True)
-    y = np.array([
+    y_tt = np.array([
+        df_pep.filter(
+            pl.col('pep_fdr') <= _x,
+            pl.col('TT')
+        ).height
+        for _x in x
+    ])
+    y_td = np.array([
+        df_pep.filter(
+            pl.col('pep_fdr') <= _x,
+            pl.col('TT')
+        ).height
+        for _x in x
+    ])
+    y_dd = np.array([
         df_pep.filter(
             pl.col('pep_fdr') <= _x,
             pl.col('TT')
@@ -148,7 +180,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
 
     pep_knee_fdr = .5
     kn = KneeLocator(
-        x, y,
+        x, y_tt,
         curve="concave",
         interp_method="polynomial",
         polynomial_degree=poly_deg
@@ -158,10 +190,14 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
 
     # Try to fulfill probabilities
     pep_knee_idx = np.argwhere(x==pep_knee_fdr)[0][0]
-    if y[pep_knee_idx]*pep_knee_fdr < td_prob:
+    td_prob_bad = y_tt[pep_knee_idx] * pep_knee_fdr >= td_prob
+    td_dd_prop_bad = y_dd[pep_knee_idx] * td_dd_ratio > y_td[pep_knee_idx]
+    if td_prob_bad or td_dd_prop_bad:
         while pep_knee_idx < points:
             pep_knee_idx += 1
-            if y[pep_knee_idx] * pep_knee_fdr >= td_prob:
+            td_prob_bad = y_tt[pep_knee_idx] * pep_knee_fdr >= td_prob
+            td_dd_prop_bad = y_dd[pep_knee_idx] * td_dd_ratio > y_td[pep_knee_idx]
+            if td_prob_bad or td_dd_prop_bad:
                 pep_knee_fdr = x[pep_knee_idx]
                 break
 
@@ -171,7 +207,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     logger.debug('Calculate protein FDR and filter')
     df_prot = _prot_fdr(df_pep, aggs['prot'], 1.0, td_prot_prob)
     x = np.linspace(0, 0.5, points, endpoint=True)
-    y = np.array([
+    y_tt = np.array([
         df_prot.filter(
             pl.col('prot_fdr') <= _x,
             pl.col('TT')
@@ -181,7 +217,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
 
     prot_knee_fdr = .5
     kn = KneeLocator(
-        x, y,
+        x, y_tt,
         curve="concave",
         interp_method="polynomial",
         polynomial_degree=poly_deg
@@ -191,10 +227,10 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
 
     # Try to fulfill probabilities
     prot_knee_idx = np.argwhere(x==prot_knee_fdr)[0][0]
-    if y[prot_knee_idx]*prot_knee_fdr < td_prot_prob:
+    if y_tt[prot_knee_idx]*prot_knee_fdr < td_prot_prob:
         while prot_knee_idx < points:
             prot_knee_idx += 1
-            if y[prot_knee_idx] * prot_knee_fdr >= td_prot_prob:
+            if y_tt[prot_knee_idx] * prot_knee_fdr >= td_prot_prob:
                 prot_knee_fdr = x[prot_knee_idx]
                 break
 
@@ -207,17 +243,31 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     logger.debug('Calculate link FDR and cutoff')
     df_link = _link_fdr(df_pep, aggs['link'], 1.0, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
     x = np.linspace(0, 0.5, points, endpoint=True)
-    y = np.array([
+    y_tt = np.array([
         df_link.filter(
             pl.col('link_fdr') <= _x,
             pl.col('TT')
         ).height
         for _x in x
     ])
+    y_td = np.array([
+        df_link.filter(
+            pl.col('link_fdr') <= _x,
+            pl.col('TD')
+        ).height
+        for _x in x
+    ])
+    y_dd = np.array([
+        df_link.filter(
+            pl.col('link_fdr') <= _x,
+            pl.col('DD')
+        ).height
+        for _x in x
+    ])
 
     link_knee_fdr = 0.5
     kn = KneeLocator(
-        x, y,
+        x, y_tt,
         curve="concave",
         interp_method="polynomial",
         polynomial_degree=poly_deg
@@ -227,10 +277,14 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
 
     # Try to fulfill probabilities
     link_knee_idx = np.argwhere(x==link_knee_fdr)[0][0]
-    if y[link_knee_idx]*link_knee_fdr < td_prob:
+    td_prob_bad = y_tt[link_knee_idx] * link_knee_fdr >= td_prob
+    td_dd_prop_bad = y_dd[link_knee_idx] * td_dd_ratio > y_td[link_knee_idx]
+    if td_prob_bad or td_dd_prop_bad:
         while link_knee_idx < points:
             link_knee_idx += 1
-            if y[link_knee_idx] * link_knee_fdr >= td_prob:
+            td_prob_bad = y_tt[link_knee_idx] * link_knee_fdr >= td_prob
+            td_dd_prop_bad = y_dd[link_knee_idx] * td_dd_ratio > y_td[link_knee_idx]
+            if td_prob_bad or td_dd_prop_bad:
                 link_knee_fdr = x[link_knee_idx]
                 break
 
