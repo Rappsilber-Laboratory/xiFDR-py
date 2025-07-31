@@ -153,7 +153,7 @@ def boost_manhattan(df: pl.DataFrame,
     )
 
     n_params = len(param_ranges)
-    best_result = opt_wrapper(best_params)[0]
+    best_result = opt_wrapper(best_params)
     logger.info(f'Initial result ({best_result}) for params: {best_params}')
     current_countdown = countdown
     if n_jobs <= 0:
@@ -196,8 +196,6 @@ def boost_manhattan(df: pl.DataFrame,
             )
             # Run FDR calculation (possibly in parallel)
             results_flat = list(pool.map(opt_wrapper, grid_flat))
-            scores_flat = [r[0] for r in results_flat]
-            error_levels = [r[1] for r in results_flat]
             # Copy last best parameters to generate new best
             top_params = best_params.copy()
             grid_top_results = []
@@ -210,7 +208,7 @@ def boost_manhattan(df: pl.DataFrame,
                 ])
                 to_index = from_index + len(grid)
                 # Cut out according results
-                grid_results = scores_flat[from_index:to_index]
+                grid_results = results_flat[from_index:to_index]
                 # Get index of best result for this parameter
                 grid_top_index = np.argmin(grid_results)
                 # Get best params config and result for this parameter
@@ -222,8 +220,14 @@ def boost_manhattan(df: pl.DataFrame,
                     top_params[grid_i] = grid_top_params[grid_i]
             top_result = min(grid_top_results)
             if best_result is None or top_result < best_result:
-                param_diff = np.abs(np.array(best_params)-np.array(top_params))
-                search_spreads[param_diff!=0] = param_diff[param_diff!=0] * 2
+                if top_result <= -1:
+                    param_diff = np.abs(np.array(best_params)-np.array(top_params))
+                    search_spreads[param_diff!=0] = param_diff[param_diff!=0] * 2
+                else:
+                    # Search wider while probabilities are not fulfilled
+                    wide_spread_thresh = 20
+                    search_spreads[search_spreads<wide_spread_thresh] *= 2
+                    search_spreads[search_spreads>=wide_spread_thresh] *= .8
                 best_result = top_result
                 best_params = top_params
                 current_countdown = countdown
@@ -236,14 +240,6 @@ def boost_manhattan(df: pl.DataFrame,
                 search_spreads[search_spreads>=min_point_dist] *= .8
                 logger.info(f'No improvement for iteration. Countdown: {current_countdown}')
                 current_countdown -= 1
-            # if error_levels[grid_top_index] is None:
-            #     error_level = error_levels[grid_top_index]
-            #     search_spreads[error_level] = best_params[error_level]*2
-            #     best_params[error_level] *= 3
-            #     logger.debug(
-            #         f'Level {error_level} did not pass the probability check. '
-            #         f'Push parameter to {best_params[error_level]}.'
-            #     )
             logger.debug(f'New search spreads: {search_spreads}')
 
     return best_params
@@ -259,31 +255,7 @@ def _optimization_template(cutoffs,
                            boost_between: bool = True,
                            td_prob: int = 2,
                            td_prot_prob: int = 10,
-                           td_dd_ratio: float = 1.0) -> (float, int|None):
-    """
-    Template to test FDR cutoffs
-
-    Parameters
-    ----------
-    cutoffs
-    df
-    min_len
-    unique_csm
-    boost_cols
-    neg_boost_cols
-    boost_level
-    boost_between
-    td_prob
-    td_prot_prob
-    td_dd_ratio
-
-    Returns
-    -------
-    Returns a tuple with the FDR result and optionally the index of the first FDR level
-    that not fulfills the probability checks (or None if all pass). The result is the negative
-    number of samples of the target level or the same divided by the input size if the probabilitie
-    are not fulfilled.
-    """
+                           td_dd_ratio: float = 1.0) -> float:
     fdrs = cutoffs[:5]
     col_levels = cutoffs[5:]
     neg_col_levels = col_levels[len(boost_cols):]
@@ -336,6 +308,6 @@ def _optimization_template(cutoffs,
             td_prob_bad = gl_tt*cutoffs[li] < td_prob
             dd_prob_bad = gl_dd*td_dd_ratio > gl_td
             if td_prob_bad or dd_prob_bad:
-                return -tp/df.height, li
+                return -tp/df.height
 
-    return -tp, None
+    return -tp
