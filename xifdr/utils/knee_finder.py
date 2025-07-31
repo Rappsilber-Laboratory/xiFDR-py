@@ -138,12 +138,12 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
 
     # Try to fulfill probabilities
     csm_knee_idx = np.argwhere(x==csm_knee_fdr)[0][0]
-    td_prob_bad = y_tt[csm_knee_idx] * csm_knee_fdr <= td_prob
+    td_prob_bad = y_tt[csm_knee_idx] * csm_knee_fdr < td_prob
     td_dd_prop_bad = y_dd[csm_knee_idx] * td_dd_ratio > y_td[csm_knee_idx]
     if td_prob_bad or td_dd_prop_bad:
         while csm_knee_idx < points:
             csm_knee_idx += 1
-            td_prob_bad = y_tt[csm_knee_idx] * csm_knee_fdr <= td_prob
+            td_prob_bad = y_tt[csm_knee_idx] * csm_knee_fdr < td_prob
             td_dd_prop_bad = y_dd[csm_knee_idx] * td_dd_ratio > y_td[csm_knee_idx]
             if not (td_prob_bad or td_dd_prop_bad):
                 csm_knee_fdr = x[csm_knee_idx]
@@ -190,12 +190,12 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
 
     # Try to fulfill probabilities
     pep_knee_idx = np.argwhere(x==pep_knee_fdr)[0][0]
-    td_prob_bad = y_tt[pep_knee_idx] * pep_knee_fdr <= td_prob
+    td_prob_bad = y_tt[pep_knee_idx] * pep_knee_fdr < td_prob
     td_dd_prop_bad = y_dd[pep_knee_idx] * td_dd_ratio > y_td[pep_knee_idx]
     if td_prob_bad or td_dd_prop_bad:
         while pep_knee_idx < points:
             pep_knee_idx += 1
-            td_prob_bad = y_tt[pep_knee_idx] * pep_knee_fdr <= td_prob
+            td_prob_bad = y_tt[pep_knee_idx] * pep_knee_fdr < td_prob
             td_dd_prop_bad = y_dd[pep_knee_idx] * td_dd_ratio > y_td[pep_knee_idx]
             if not (td_prob_bad or td_dd_prop_bad):
                 pep_knee_fdr = x[pep_knee_idx]
@@ -277,12 +277,12 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
 
     # Try to fulfill probabilities
     link_knee_idx = np.argwhere(x==link_knee_fdr)[0][0]
-    td_prob_bad = y_tt[link_knee_idx] * link_knee_fdr <= td_prob
+    td_prob_bad = y_tt[link_knee_idx] * link_knee_fdr < td_prob
     td_dd_prop_bad = y_dd[link_knee_idx] * td_dd_ratio > y_td[link_knee_idx]
     if td_prob_bad or td_dd_prop_bad:
         while link_knee_idx < points:
             link_knee_idx += 1
-            td_prob_bad = y_tt[link_knee_idx] * link_knee_fdr <= td_prob
+            td_prob_bad = y_tt[link_knee_idx] * link_knee_fdr < td_prob
             td_dd_prop_bad = y_dd[link_knee_idx] * td_dd_ratio > y_td[link_knee_idx]
             if not (td_prob_bad or td_dd_prop_bad):
                 link_knee_fdr = x[link_knee_idx]
