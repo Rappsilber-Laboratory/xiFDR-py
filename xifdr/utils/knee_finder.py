@@ -142,12 +142,12 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     td_dd_prop_bad = y_dd[csm_knee_idx] * td_dd_ratio > y_td[csm_knee_idx]
     if td_prob_bad or td_dd_prop_bad:
         while csm_knee_idx < points:
-            csm_knee_idx += 1
             td_prob_bad = y_tt[csm_knee_idx] * csm_knee_fdr < td_prob
             td_dd_prop_bad = y_dd[csm_knee_idx] * td_dd_ratio > y_td[csm_knee_idx]
             if not (td_prob_bad or td_dd_prop_bad):
                 csm_knee_fdr = x[csm_knee_idx]
                 break
+            csm_knee_idx += 1
 
     df_csm = df_csm.filter(pl.col('csm_fdr') <= csm_knee_fdr)
 
@@ -194,12 +194,12 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     td_dd_prop_bad = y_dd[pep_knee_idx] * td_dd_ratio > y_td[pep_knee_idx]
     if td_prob_bad or td_dd_prop_bad:
         while pep_knee_idx < points:
-            pep_knee_idx += 1
             td_prob_bad = y_tt[pep_knee_idx] * pep_knee_fdr < td_prob
             td_dd_prop_bad = y_dd[pep_knee_idx] * td_dd_ratio > y_td[pep_knee_idx]
             if not (td_prob_bad or td_dd_prop_bad):
                 pep_knee_fdr = x[pep_knee_idx]
                 break
+            pep_knee_idx += 1
 
     df_pep = df_pep.filter(pl.col('pep_fdr') <= pep_knee_fdr)
 
@@ -229,10 +229,10 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     prot_knee_idx = np.argwhere(x==prot_knee_fdr)[0][0]
     if y_tt[prot_knee_idx]*prot_knee_fdr < td_prot_prob:
         while prot_knee_idx < points:
-            prot_knee_idx += 1
             if y_tt[prot_knee_idx] * prot_knee_fdr <= td_prot_prob:
                 prot_knee_fdr = x[prot_knee_idx]
                 break
+            prot_knee_idx += 1
 
     df_prot = df_prot.filter(pl.col('prot_fdr') <= prot_knee_fdr)
 
@@ -281,11 +281,11 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     td_dd_prop_bad = y_dd[link_knee_idx] * td_dd_ratio > y_td[link_knee_idx]
     if td_prob_bad or td_dd_prop_bad:
         while link_knee_idx < points:
-            link_knee_idx += 1
             td_prob_bad = y_tt[link_knee_idx] * link_knee_fdr < td_prob
             td_dd_prop_bad = y_dd[link_knee_idx] * td_dd_ratio > y_td[link_knee_idx]
             if not (td_prob_bad or td_dd_prop_bad):
                 link_knee_fdr = x[link_knee_idx]
                 break
+            link_knee_idx += 1
 
     return (csm_knee_fdr, pep_knee_fdr, prot_knee_fdr, link_knee_fdr)
