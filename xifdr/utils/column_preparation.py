@@ -56,8 +56,12 @@ def prepare_columns(df):
     if 'fdr_group' not in df.columns:
         df = df.with_columns(
             fdr_group=(
-                (pl.col('protein_p1').list.set_intersection(
-                    pl.col('protein_p2')
+                (pl.col('protein_p1').list.eval(
+                    pl.element().str.replace_all('REV_', '')
+                ).list.set_intersection(
+                    pl.col('protein_p2').list.eval(
+                        pl.element().str.replace_all('REV_', '')
+                    )
                 ).list.len()==0).cast(pl.String).replace(
                     ['true', 'false'],
                     ['between', 'self']
