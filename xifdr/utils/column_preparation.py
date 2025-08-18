@@ -3,7 +3,7 @@ import polars as pl
 from polars import col
 
 
-def prepare_columns(df):
+def prepare_columns(df, decoy_adjunct='REV_'):
     """Prepares and processes a Polars DataFrame for protein-protein interaction analysis.
 
     This function ensures the proper format of protein columns, calculates crosslink positions,
@@ -57,10 +57,10 @@ def prepare_columns(df):
         df = df.with_columns(
             fdr_group=(
                 (pl.col('protein_p1').list.eval(
-                    pl.element().str.replace_all('REV_', '')
+                    pl.element().str.replace_all(decoy_adjunct, '')
                 ).list.set_intersection(
                     pl.col('protein_p2').list.eval(
-                        pl.element().str.replace_all('REV_', '')
+                        pl.element().str.replace_all(decoy_adjunct, '')
                     )
                 ).list.len()==0).cast(pl.String).replace(
                     ['true', 'false'],
