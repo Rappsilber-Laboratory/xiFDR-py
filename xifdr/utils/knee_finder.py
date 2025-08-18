@@ -129,7 +129,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     csm_knee_fdr = x[len(x)//2]
     for cutoff in [points//2, points]:
         kn = KneeLocator(
-            x[:cutoff//2], y_tt[:cutoff//2],
+            x[:cutoff+1], y_tt[:cutoff+1],
             curve="concave",
             interp_method="polynomial",
             polynomial_degree=poly_deg
@@ -183,7 +183,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     pep_knee_fdr= x[len(x)//2]
     for cutoff in [points//2, points]:
         kn = KneeLocator(
-            x[:cutoff//2], y_tt[:cutoff//2],
+            x[:cutoff+1], y_tt[:cutoff+1],
             curve="concave",
             interp_method="polynomial",
             polynomial_degree=poly_deg
@@ -222,7 +222,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     prot_knee_fdr = x[len(x)//2]
     for cutoff in [points//2, points]:
         kn = KneeLocator(
-            x[:cutoff//2], y_tt[:cutoff//2],
+            x[:cutoff+1], y_tt[:cutoff+1],
             curve="concave",
             interp_method="polynomial",
             polynomial_degree=poly_deg
@@ -274,7 +274,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     link_knee_fdr = x[len(x)//2]
     for cutoff in [points//2, points]:
         kn = KneeLocator(
-            x[:cutoff//2], y_tt[:cutoff//2],
+            x[:cutoff+1], y_tt[:cutoff+1],
             curve="concave",
             interp_method="polynomial",
             polynomial_degree=poly_deg
