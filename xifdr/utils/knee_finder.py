@@ -219,7 +219,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
         for _x in x
     ])
 
-    prot_knee_fdr = x[len(x)//2]
+    prot_knee_fdr = x[-1]
     for cutoff in [points//2, points]:
         kn = KneeLocator(
             x[:cutoff+1], y_tt[:cutoff+1],
