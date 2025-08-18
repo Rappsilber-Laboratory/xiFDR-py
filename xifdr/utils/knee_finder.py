@@ -103,7 +103,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     never_agg_cols += ['score', 'protein_score_p1', 'protein_score_p2']
 
     df_csm = _csm_fdr(df, 1, unique_csm, td_prob, td_dd_ratio)
-    x = np.linspace(0, 0.5, points, endpoint=True)
+    x = np.linspace(0, 1.0, points, endpoint=True)
     y_tt = np.array([
         df_csm.filter(
             pl.col('csm_fdr') <= _x,
@@ -127,14 +127,16 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     ])
 
     csm_knee_fdr = 0.5
-    kn = KneeLocator(
-        x, y_tt,
-        curve="concave",
-        interp_method="polynomial",
-        polynomial_degree=poly_deg
-    )
-    if kn.all_knees and kn.find_knee()[0] > 0:
-        csm_knee_fdr = kn.find_knee()[0]
+    for cutoff in [points//2, points]:
+        kn = KneeLocator(
+            x[:cutoff//2], y_tt[:cutoff//2],
+            curve="concave",
+            interp_method="polynomial",
+            polynomial_degree=poly_deg
+        )
+        if kn.all_knees and kn.find_knee()[0] > 0:
+            csm_knee_fdr = kn.find_knee()[0]
+            break
 
     # Try to fulfill probabilities
     csm_knee_idx = np.argwhere(x==csm_knee_fdr)[0][0]
@@ -179,14 +181,17 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     ])
 
     pep_knee_fdr = .5
-    kn = KneeLocator(
-        x, y_tt,
-        curve="concave",
-        interp_method="polynomial",
-        polynomial_degree=poly_deg
-    )
-    if kn.all_knees and kn.find_knee()[0] > 0:
-        pep_knee_fdr = kn.find_knee()[0]
+    for cutoff in [points//2, points]:
+        cutoff = int(cutoff)
+        kn = KneeLocator(
+            x[:cutoff//2], y_tt[:cutoff//2],
+            curve="concave",
+            interp_method="polynomial",
+            polynomial_degree=poly_deg
+        )
+        if kn.all_knees and kn.find_knee()[0] > 0:
+            pep_knee_fdr = kn.find_knee()[0]
+            break
 
     # Try to fulfill probabilities
     pep_knee_idx = np.argwhere(x==pep_knee_fdr)[0][0]
@@ -216,14 +221,17 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     ])
 
     prot_knee_fdr = .5
-    kn = KneeLocator(
-        x, y_tt,
-        curve="concave",
-        interp_method="polynomial",
-        polynomial_degree=poly_deg
-    )
-    if kn.all_knees and kn.find_knee()[0] > 0:
-        prot_knee_fdr = kn.find_knee()[0]
+    for cutoff in [points//2, points]:
+        cutoff = int(cutoff)
+        kn = KneeLocator(
+            x[:cutoff//2], y_tt[:cutoff//2],
+            curve="concave",
+            interp_method="polynomial",
+            polynomial_degree=poly_deg
+        )
+        if kn.all_knees and kn.find_knee()[0] > 0:
+            prot_knee_fdr = kn.find_knee()[0]
+            break
 
     # Try to fulfill probabilities
     prot_knee_idx = np.argwhere(x==prot_knee_fdr)[0][0]
@@ -266,14 +274,17 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     ])
 
     link_knee_fdr = 0.5
-    kn = KneeLocator(
-        x, y_tt,
-        curve="concave",
-        interp_method="polynomial",
-        polynomial_degree=poly_deg
-    )
-    if kn.all_knees and kn.find_knee()[0] > 0:
-        link_knee_fdr = kn.find_knee()[0]
+    for cutoff in [points//2, points]:
+        cutoff = int(cutoff)
+        kn = KneeLocator(
+            x[:cutoff//2], y_tt[:cutoff//2],
+            curve="concave",
+            interp_method="polynomial",
+            polynomial_degree=poly_deg
+        )
+        if kn.all_knees and kn.find_knee()[0] > 0:
+            link_knee_fdr = kn.find_knee()[0]
+            break
 
     # Try to fulfill probabilities
     link_knee_idx = np.argwhere(x==link_knee_fdr)[0][0]
