@@ -103,7 +103,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     never_agg_cols += ['score', 'protein_score_p1', 'protein_score_p2']
 
     df_csm = _csm_fdr(df, 1, unique_csm, td_prob, td_dd_ratio)
-    x = np.linspace(0, 1.0, points, endpoint=True)
+    x = np.linspace(0, 1, points, endpoint=True)
     y_tt = np.array([
         df_csm.filter(
             pl.col('csm_fdr') <= _x,
@@ -126,7 +126,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
         for _x in x
     ])
 
-    csm_knee_fdr = 0.5
+    csm_knee_fdr = x[len(x)//2]
     for cutoff in [points//2, points]:
         kn = KneeLocator(
             x[:cutoff//2], y_tt[:cutoff//2],
@@ -157,7 +157,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     logger.debug('Calculate peptide FDR and filter')
     df_pep = _pep_fdr(df_csm, aggs['pep'], 1.0, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
 
-    x = np.linspace(0, 0.5, points, endpoint=True)
+    x = np.linspace(0, 1, points, endpoint=True)
     y_tt = np.array([
         df_pep.filter(
             pl.col('pep_fdr') <= _x,
@@ -180,9 +180,8 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
         for _x in x
     ])
 
-    pep_knee_fdr = .5
+    pep_knee_fdr= x[len(x)//2]
     for cutoff in [points//2, points]:
-        cutoff = int(cutoff)
         kn = KneeLocator(
             x[:cutoff//2], y_tt[:cutoff//2],
             curve="concave",
@@ -211,7 +210,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     # Calculate protein FDR and filter
     logger.debug('Calculate protein FDR and filter')
     df_prot = _prot_fdr(df_pep, aggs['prot'], 1.0, td_prot_prob)
-    x = np.linspace(0, 0.5, points, endpoint=True)
+    x = np.linspace(0, 1, points, endpoint=True)
     y_tt = np.array([
         df_prot.filter(
             pl.col('prot_fdr') <= _x,
@@ -220,9 +219,8 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
         for _x in x
     ])
 
-    prot_knee_fdr = .5
+    prot_knee_fdr = x[len(x)//2]
     for cutoff in [points//2, points]:
-        cutoff = int(cutoff)
         kn = KneeLocator(
             x[:cutoff//2], y_tt[:cutoff//2],
             curve="concave",
@@ -250,7 +248,7 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
     # Calculate link FDR and cutoff
     logger.debug('Calculate link FDR and cutoff')
     df_link = _link_fdr(df_pep, aggs['link'], 1.0, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
-    x = np.linspace(0, 0.5, points, endpoint=True)
+    x = np.linspace(0, 1, points, endpoint=True)
     y_tt = np.array([
         df_link.filter(
             pl.col('link_fdr') <= _x,
@@ -273,9 +271,8 @@ def find_knees(df: pl.DataFrame | pd.DataFrame,
         for _x in x
     ])
 
-    link_knee_fdr = 0.5
+    link_knee_fdr = x[len(x)//2]
     for cutoff in [points//2, points]:
-        cutoff = int(cutoff)
         kn = KneeLocator(
             x[:cutoff//2], y_tt[:cutoff//2],
             curve="concave",
