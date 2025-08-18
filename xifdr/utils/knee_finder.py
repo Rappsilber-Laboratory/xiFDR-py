@@ -15,7 +15,7 @@ g_kwargs = None
 
 
 def find_knees(df: pl.DataFrame | pd.DataFrame,
-               points=200,
+               points=201,
                poly_deg=3,
                min_len: int = 5,
                decoy_adjunct: str = 'REV_',
