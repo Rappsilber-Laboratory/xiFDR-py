@@ -117,7 +117,7 @@ def boost_manhattan(df: pl.DataFrame,
         best_params += [maxi]
 
     # Figure out knee points for starting
-    df = prepare_columns(df, decoy_adjunct)
+    df = prepare_columns(df)
     knee_points = find_knees(df.filter(pl.col ('fdr_group') == 'between'), **kwargs)
     for i, p in enumerate(knee_points):
         best_params[i] = p

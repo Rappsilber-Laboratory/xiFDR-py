@@ -84,7 +84,7 @@ def full_fdr(df: pl.DataFrame | pd.DataFrame,
         aggs.update(custom_aggs)
 
     if prepare_column:
-        df = prepare_columns(df, decoy_adjunct)
+        df = prepare_columns(df)
 
     # Filter CSMs for minimum peptide length
     df = df.filter(
