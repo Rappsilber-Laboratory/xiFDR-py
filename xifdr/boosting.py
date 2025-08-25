@@ -226,6 +226,9 @@ def boost_manhattan(df: pl.DataFrame,
                 if top_result <= -1:
                     param_diff = np.abs(np.array(best_params)-np.array(top_params))
                     search_spreads[param_diff!=0] = param_diff[param_diff!=0] * 2
+                    # Avoid too narrow search spreads (at least 0.1% between search points)
+                    min_point_dist = 0.001 * points / 2
+                    search_spreads[search_spreads<=min_point_dist] += min_point_dist
                 else:
                     # Search wider while probabilities are not fulfilled
                     wide_spread_thresh = 0.20
