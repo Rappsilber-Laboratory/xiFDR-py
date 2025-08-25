@@ -100,7 +100,7 @@ def boost_manhattan(df: pl.DataFrame,
                     points: int = 10,
                     n_jobs: int = -1,
                     **kwargs):
-    df = prepare_columns(df, decoy_adjunct)
+    df = prepare_columns(df)
     param_ranges = (
         csm_fdr,
         pep_fdr,
