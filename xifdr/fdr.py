@@ -14,8 +14,8 @@ csm_cols = [
     'protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2', 'charge'
 ]
 pep_cols = ['decoy_p1', 'decoy_p2', 'sequence_p1', 'sequence_p2', 'protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2']
-link_cols = ['decoy_p1', 'decoy_p2', 'sequence_p1', 'sequence_p2', 'protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2']
-ppi_cols = ['decoy_p1', 'decoy_p2', 'protein_p1', 'protein_p2', 'cl_pos_p2']
+link_cols = ['decoy_p1', 'decoy_p2', 'protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2']
+ppi_cols = ['decoy_p1', 'decoy_p2', 'protein_p1', 'protein_p2']
 fdr_groups_csm_pep = ['self', 'between', 'linear']  # FDR groups for CSM and peptide level
 fdr_groups_link_ppi = ['self', 'between']  # FDR groups for link and PPI level
 
