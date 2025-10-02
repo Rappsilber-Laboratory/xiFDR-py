@@ -25,6 +25,7 @@ def boost(df: pl.DataFrame,
           boost_level: str = "ppi",
           boost_between: bool = True,
           decoy_adjunct: str = "REV_",
+          start_points: (float, float, float, float, float) = None,
           method: str = "manhattan",
           countdown: int = 3,
           points: int = 10,
@@ -47,10 +48,16 @@ def boost(df: pl.DataFrame,
         Search range for residue link FDR level cutoff
     ppi_fdr
         Search range for protein pair FDR level cutoff
+    boost_cols
+        Columns to boost a lower bound threshold on
+    neg_boost_cols
+        Columns to boost a lower bound threshold on
     boost_level
         FDR level tp boost for
     boost_between
         Whether to boost for between links
+    start_points
+        FDR start points for boosting
     method
         Search algorithm to use
     countdown
@@ -77,6 +84,7 @@ def boost(df: pl.DataFrame,
             boost_level=boost_level,
             boost_between=boost_between,
             decoy_adjunct=decoy_adjunct,
+            start_points=start_points,
             countdown=countdown,
             points=points,
             n_jobs=n_jobs,
@@ -96,6 +104,7 @@ def boost_manhattan(df: pl.DataFrame,
                     boost_level: str = "ppi",
                     boost_between: bool = True,
                     decoy_adjunct: str = "REV_",
+                    start_points: (float, float, float, float, float) = None,
                     countdown: int = 3,
                     points: int = 10,
                     n_jobs: int = -1,
@@ -118,8 +127,10 @@ def boost_manhattan(df: pl.DataFrame,
 
     # Figure out knee points for starting
     df = prepare_columns(df)
-    knee_points = find_knees(df.filter(pl.col ('fdr_group') == 'between'), **kwargs)
-    for i, p in enumerate(knee_points):
+    if start_points is None:
+        start_points = find_knees(df.filter(pl.col ('fdr_group') == 'between'), **kwargs)
+
+    for i, p in enumerate(start_points):
         best_params[i] = p
         # Clip to param max
         best_params[i] = min(
