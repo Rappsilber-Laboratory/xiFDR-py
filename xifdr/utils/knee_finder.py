@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 g_kwargs = None
 
 
-def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
+def find_knees(df: Union[pl.DataFrame, pd.DataFrame]git,
                points=200,
                poly_deg=3,
                min_len: int = 5,
