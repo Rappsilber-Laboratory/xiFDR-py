@@ -1,5 +1,6 @@
 import logging
 import warnings
+from typing import Union
 
 import pandas as pd
 import polars as pl
@@ -20,7 +21,7 @@ fdr_groups_csm_pep = ['self', 'between', 'linear']  # FDR groups for CSM and pep
 fdr_groups_link_ppi = ['self', 'between']  # FDR groups for link and PPI level
 
 
-def full_fdr(df: pl.DataFrame | pd.DataFrame,
+def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
              csm_fdr:float = 1.0,
              pep_fdr:float = 1.0,
              prot_fdr:float = 1.0,
@@ -474,7 +475,7 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_r
     return df_ppi
 
 
-def single_grouped_fdr(df: pl.DataFrame | pd.DataFrame, fdr_group_col: str = "fdr_group") -> pl.Series:
+def single_grouped_fdr(df: Union[pl.DataFrame, pd.DataFrame], fdr_group_col: str = "fdr_group") -> pl.Series:
     """
     Computes the false discovery rate (FDR) for a given DF.
 
@@ -517,7 +518,7 @@ def single_grouped_fdr(df: pl.DataFrame | pd.DataFrame, fdr_group_col: str = "fd
     return fdr_with_order.sort(order_col)['fdr']
 
 
-def single_fdr(df: pl.DataFrame | pd.DataFrame) -> pl.Series:
+def single_fdr(df: Union[pl.DataFrame, pd.DataFrame]) -> pl.Series:
     working_df = df.select([
         'TT',
         'TD',

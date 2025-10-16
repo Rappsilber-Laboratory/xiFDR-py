@@ -1,4 +1,5 @@
 import logging
+from typing import Union
 
 import numpy as np
 import pandas as pd
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 g_kwargs = None
 
 
-def find_knees(df: pl.DataFrame | pd.DataFrame,
+def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
                points=201,
                poly_deg=3,
                min_len: int = 5,
