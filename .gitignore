@@ -7,3 +7,4 @@ dist
 xifdr/_version.py
 __pycache__
 .DS_Store
+.pytest_cache
