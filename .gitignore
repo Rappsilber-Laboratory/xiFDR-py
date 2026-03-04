@@ -6,3 +6,4 @@ dist
 .idea
 xifdr/_version.py
 __pycache__
+.DS_Store
