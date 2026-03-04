@@ -5,3 +5,4 @@ dist
 *.egg-info
 .idea
 xifdr/_version.py
+__pycache__
