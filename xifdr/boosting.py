@@ -21,8 +21,8 @@ def boost(df: pl.DataFrame,
           prot_fdr: (float, float) = (0.0, 1.0),
           link_fdr: (float, float) = (0.0, 1.0),
           ppi_fdr: (float, float) = (0.0, 1.0),
-          boost_cols: list = [],
-          neg_boost_cols: list = [],
+          boost_cols: list = None,
+          neg_boost_cols: list = None,
           boost_level: str = "ppi",
           boost_between: bool = True,
           method: str = "manhattan",
@@ -47,6 +47,10 @@ def boost(df: pl.DataFrame,
         Search range for residue link FDR level cutoff
     ppi_fdr
         Search range for protein pair FDR level cutoff
+    boost_cols
+        Columns in which to look for lower cutoffs
+    neg_boost_cols
+        Columns in which to look for upper cutoffs
     boost_level
         FDR level tp boost for
     boost_between
@@ -64,6 +68,10 @@ def boost(df: pl.DataFrame,
     -------
         Returns a tuple with the optimal FDR levels.
     """
+    if boost_cols is None:
+        boost_cols = []
+    if neg_boost_cols is None:
+        neg_boost_cols = []
     if method == 'manhattan':
         return boost_manhattan(
             df=df,
@@ -90,8 +98,8 @@ def boost_manhattan(df: pl.DataFrame,
                     prot_fdr: (float, float) = (0.0, 1.0),
                     link_fdr: (float, float) = (0.0, 1.0),
                     ppi_fdr: (float, float) = (0.0, 1.0),
-                    boost_cols: list = [],
-                    neg_boost_cols: list = [],
+                    boost_cols: list = None,
+                    neg_boost_cols: list = None,
                     boost_level: str = "ppi",
                     boost_between: bool = True,
                     countdown: int = 3,
@@ -106,6 +114,10 @@ def boost_manhattan(df: pl.DataFrame,
         link_fdr,
         ppi_fdr
     )
+    if boost_cols is None:
+        boost_cols = []
+    if neg_boost_cols is None:
+        neg_boost_cols = []
     param_ranges += tuple((0.0, 1.0) for _ in boost_cols)
     param_ranges += tuple((0.0, 1.0) for _ in neg_boost_cols)
 
