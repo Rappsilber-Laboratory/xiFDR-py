@@ -25,7 +25,7 @@ def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
                td_prob: int = 2,
                td_prot_prob: int = 10,
                td_dd_ratio: float = 1.0,
-               custom_aggs: dict = None) -> tuple[float, float, float]:
+               custom_aggs: dict = None) -> tuple[float, float, float, float]:
     """
 
     Parameters
@@ -118,7 +118,7 @@ def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
         polynomial_degree=poly_deg
     )
     if kn.all_knees and kn.find_knee()[0] > 0:
-        csm_knee_fdr = kn.find_knee()[0]
+        csm_knee_fdr = float(kn.find_knee()[0])
 
     df_csm = df_csm.filter(pl.col('csm_fdr') <= csm_knee_fdr)
 
@@ -140,7 +140,7 @@ def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
         polynomial_degree=poly_deg
     )
     if kn.all_knees and kn.find_knee()[0] > 0:
-        pep_knee_fdr = kn.find_knee()[0]
+        pep_knee_fdr = float(kn.find_knee()[0])
 
     df_pep = df_pep.filter(pl.col('pep_fdr') <= pep_knee_fdr)
 
@@ -161,7 +161,7 @@ def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
         polynomial_degree=poly_deg
     )
     if kn.all_knees and kn.find_knee()[0] > 0:
-        prot_knee_fdr = kn.find_knee()[0]
+        prot_knee_fdr = float(kn.find_knee()[0])
 
     df_prot = df_prot.filter(pl.col('prot_fdr') <= prot_knee_fdr)
 
@@ -185,6 +185,6 @@ def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
         polynomial_degree=poly_deg
     )
     if kn.all_knees and kn.find_knee()[0] > 0:
-        link_knee_fdr = kn.find_knee()[0]
+        link_knee_fdr = float(kn.find_knee()[0])
 
-    return (csm_knee_fdr, pep_knee_fdr, prot_knee_fdr, link_knee_fdr)
+    return csm_knee_fdr, pep_knee_fdr, prot_knee_fdr, link_knee_fdr
