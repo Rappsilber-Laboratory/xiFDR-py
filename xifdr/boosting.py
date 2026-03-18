@@ -8,7 +8,7 @@ from polars import col
 import polars as pl
 from contextlib import closing
 from multiprocessing import get_context
-from multiprocessing.dummy import get_context as get_dummy_context
+import multiprocessing.dummy as mp_dummy
 from .fdr import full_fdr
 from .utils.column_preparation import prepare_columns
 from .utils.knee_finder import find_knees
@@ -174,8 +174,10 @@ def boost_manhattan(df: pl.DataFrame,
         n_jobs = min(n_jobs, os.cpu_count())
         logger.info(f"Using {n_jobs} CPUs based on available memory.")
     if n_jobs == 1:
-        get_context = get_dummy_context
-    with closing(get_context('spawn').Pool(n_jobs)) as pool:
+        mp = mp_dummy
+    else:
+        mp = get_context('spawn')
+    with closing(mp.Pool(n_jobs)) as pool:
         while True:
             grids = []
             for param_index in range(n_params):
