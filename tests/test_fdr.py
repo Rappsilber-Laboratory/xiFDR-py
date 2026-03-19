@@ -141,6 +141,10 @@ def test_full_fdr():
         ppi_fdr=0.05
     )
     pass
+    assert 'csm' in x
+    assert 'pep' in x
+    assert 'link' in x
+    assert 'ppi' in x
 
 
 def test_len_filter():
