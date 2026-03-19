@@ -102,17 +102,17 @@ def test_single_fdr_monotone():
     matches += [
         # 2TD + 1DD
         [99, False, True, False, 0.1, 0.0],
-        [99, False, False, True, 0.0, 0.0],
-        [98, False, True, False, 0.1, 0.1],
+        [98, False, False, True, 0.0, 0.0],
+        [97, False, True, False, 0.1, 0.1],
         # 2TD
-        [97, False, True, False, 0.2, 0.2],
-        [96, False, True, False, 0.3, 0.2],
+        [96, False, True, False, 0.2, 0.2],
+        [95, False, True, False, 0.3, 0.2],
         # 1DD
-        [95, False, False, True, 0.2, 0.2],
+        [94, False, False, True, 0.2, 0.2],
         # 3 TD
-        [94, False, True, False, 0.3, 0.3],
-        [93, False, True, False, 0.4, 0.4],
-        [92, False, True, False, 0.5, 0.5],
+        [93, False, True, False, 0.3, 0.3],
+        [92, False, True, False, 0.4, 0.4],
+        [91, False, True, False, 0.5, 0.5],
     ]
 
     df = pl.DataFrame(
