@@ -144,7 +144,7 @@ def test_full_fdr():
 
 
 def test_len_filter():
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet('fixtures/sample_data.parquet')
     x = full_fdr(
         samples,
         csm_fdr=1.0,
@@ -165,7 +165,7 @@ def test_len_filter():
     pass
 
 def test_full_fdr_linear():
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet('fixtures/sample_data.parquet')
     samples = samples.with_columns(
         make_linear=np.random.choice([False, True], p=[0.9, 0.1], size=len(samples))
     ).with_columns(
@@ -218,7 +218,7 @@ def test_full_fdr_linear():
 
 @pytest.mark.slow
 def test_boosting():
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet('fixtures/sample_data.parquet')
     fdrs = boost(
         samples,
         csm_fdr=(0, 0.2),
@@ -230,7 +230,7 @@ def test_boosting():
     print(fdrs)
 
 def test_column_boost():
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet('fixtures/sample_data.parquet')
     samples = samples.with_columns(coverage=pl.col('coverage_p1')+pl.col('coverage_p2'))
     cutoffs = boost(
         samples,

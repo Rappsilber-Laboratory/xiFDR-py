@@ -15,7 +15,7 @@ def test_standard_td_prob():
         pl.col('DD').get(0),
         pl.col('fdr_group').get(0),
     ]
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet('fixtures/sample_data.parquet')
     x = full_fdr(
         samples,
         csm_fdr=0.5,
@@ -188,7 +188,7 @@ def test_protein_td_only_supp():
     assert res.filter(pl.col('protein_fdr_group') == 'self_or_linear').height == 0
     assert res.filter(pl.col('protein_fdr_group') == 'invalid_merged').height == 0
 
-def test_td_dd_retio():
+def test_td_dd_ratio():
     warnings.simplefilter("always")
     agg = (pl.col('score')**2).sum().sqrt()
     never_aggs = ['fdr_group', 'decoy_class', 'TT', 'TD', 'DD', 'score', 'protein_score_p1', 'protein_score_p2']
@@ -198,7 +198,7 @@ def test_td_dd_retio():
         pl.col('DD').get(0),
         pl.col('fdr_group').get(0),
     ]
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet('fixtures/sample_data.parquet')
     x = full_fdr(
         samples,
         csm_fdr=0.5,
