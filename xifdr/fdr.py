@@ -190,21 +190,24 @@ def _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio):
     logger.debug('Calculate CSM FDR and cutoff')
     df_csm = df_csm.with_columns(
         csm_fdr = single_grouped_fdr(df_csm)
-    )
-    df_csm = df_csm.filter(pl.col('csm_fdr') <= csm_fdr)
+    ).filter(pl.col('csm_fdr') <= csm_fdr)
+
     for fdr_group in fdr_groups_csm_pep:
-        target_group = df_csm.filter(
-            pl.col('fdr_group') == fdr_group
-        )
-        df_csm_tt = target_group.filter(pl.col('TT'))
-        df_csm_td = target_group.filter(pl.col('TD'))
-        df_csm_dd = target_group.filter(pl.col('DD'))
-        if len(df_csm_tt)*csm_fdr < td_prob:
+        passed_group = df_csm.filter(pl.col('fdr_group') == fdr_group)
+        if passed_group.is_empty():
+            continue
+
+        n_tt = passed_group.filter(pl.col('TT')).height
+        n_td = passed_group.filter(pl.col('TD')).height
+        n_dd = passed_group.filter(pl.col('DD')).height
+
+        if n_tt * csm_fdr < td_prob:
             warnings.warn(f'Insufficient TT for CSM FDR in group {fdr_group}.')
             df_csm = df_csm.filter(pl.col('fdr_group') != fdr_group)
-        if len(df_csm_dd)*td_dd_ratio > len(df_csm_td):
+        if n_dd * td_dd_ratio > n_td:
             warnings.warn(f'More DD than TD for CSM FDR in group {fdr_group}.')
             df_csm = df_csm.filter(pl.col('fdr_group') != fdr_group)
+
     return df_csm
 
 
@@ -222,21 +225,24 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ra
     )
     df_pep = df_pep.with_columns(
         pep_fdr = single_grouped_fdr(df_pep)
-    )
-    df_pep = df_pep.filter(pl.col('pep_fdr') <= pep_fdr)
+    ).filter(pl.col('pep_fdr') <= pep_fdr)
+
     for fdr_group in fdr_groups_csm_pep:
-        target_group = df_pep.filter(
-            pl.col('fdr_group') == fdr_group
-        )
-        df_pep_tt = target_group.filter(pl.col('TT'))
-        df_pep_td = target_group.filter(pl.col('TD'))
-        df_pep_dd = target_group.filter(pl.col('DD'))
-        if len(df_pep_tt)*pep_fdr < td_prob:
+        passed_group = df_pep.filter(pl.col('fdr_group') == fdr_group)
+        if passed_group.is_empty():
+            continue
+
+        n_tt = passed_group.filter(pl.col('TT')).height
+        n_td = passed_group.filter(pl.col('TD')).height
+        n_dd = passed_group.filter(pl.col('DD')).height
+
+        if n_tt * pep_fdr < td_prob:
             warnings.warn(f'Insufficient TT for peptide FDR in group {fdr_group}.')
             df_pep = df_pep.filter(pl.col('fdr_group') != fdr_group)
-        if len(df_pep_dd)*td_dd_ratio > len(df_pep_td):
+        if n_dd * td_dd_ratio > n_td:
             warnings.warn(f'More DD than TD for peptide FDR in group {fdr_group}.')
             df_pep = df_pep.filter(pl.col('fdr_group') != fdr_group)
+
     return df_pep
 
 
@@ -383,21 +389,24 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_
     )
     df_link = df_link.with_columns(
         link_fdr = single_grouped_fdr(df_link)
-    )
-    df_link = df_link.filter(pl.col('link_fdr') <= link_fdr)
+    ).filter(pl.col('link_fdr') <= link_fdr)
+
     for fdr_group in fdr_groups_link_ppi:
-        target_group = df_link.filter(
-            pl.col('fdr_group') == fdr_group
-        )
-        df_link_tt = target_group.filter(pl.col('TT'))
-        df_link_td = target_group.filter(pl.col('TD'))
-        df_link_dd = target_group.filter(pl.col('DD'))
-        if len(df_link_tt)*link_fdr < td_prob:
+        passed_group = df_link.filter(pl.col('fdr_group') == fdr_group)
+        if passed_group.is_empty():
+            continue
+
+        n_tt = passed_group.filter(pl.col('TT')).height
+        n_td = passed_group.filter(pl.col('TD')).height
+        n_dd = passed_group.filter(pl.col('DD')).height
+
+        if n_tt * link_fdr < td_prob:
             warnings.warn(f'Insufficient TT for link FDR in group {fdr_group}.')
             df_link = df_link.filter(pl.col('fdr_group') != fdr_group)
-        if len(df_link_dd)*td_dd_ratio > len(df_link_td):
+        if n_dd * td_dd_ratio > n_td:
             warnings.warn(f'More DD than TD for link FDR in group {fdr_group}.')
             df_link = df_link.filter(pl.col('fdr_group') != fdr_group)
+
     return df_link
 
 
@@ -437,21 +446,24 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_r
     )
     df_ppi = df_ppi.with_columns(
         ppi_fdr = single_grouped_fdr(df_ppi)
-    )
-    df_ppi = df_ppi.filter(pl.col('ppi_fdr') <= ppi_fdr)
+    ).filter(pl.col('ppi_fdr') <= ppi_fdr)
+
     for fdr_group in fdr_groups_link_ppi:
-        target_group = df_ppi.filter(
-            pl.col('fdr_group') == fdr_group
-        )
-        df_ppi_tt = target_group.filter(pl.col('TT'))
-        df_ppi_td = target_group.filter(pl.col('TD'))
-        df_ppi_dd = target_group.filter(pl.col('DD'))
-        if len(df_ppi_tt)*ppi_fdr < td_prob:
+        passed_group = df_ppi.filter(pl.col('fdr_group') == fdr_group)
+        if passed_group.is_empty():
+            continue
+
+        n_tt = passed_group.filter(pl.col('TT')).height
+        n_td = passed_group.filter(pl.col('TD')).height
+        n_dd = passed_group.filter(pl.col('DD')).height
+
+        if n_tt * ppi_fdr < td_prob:
             warnings.warn(f'Insufficient TT for PPI FDR in group {fdr_group}.')
             df_ppi = df_ppi.filter(pl.col('fdr_group') != fdr_group)
-        if len(df_ppi_dd)*td_dd_ratio > len(df_ppi_td):
+        if n_dd * td_dd_ratio > n_td:
             warnings.warn(f'More DD than TD for PPI FDR in group {fdr_group}.')
             df_ppi = df_ppi.filter(pl.col('fdr_group') != fdr_group)
+
     return df_ppi
 
 
@@ -512,10 +524,10 @@ def single_fdr(df: Union[pl.DataFrame, pd.DataFrame]) -> pl.Series:
     working_df = working_df.with_row_index(order_col)
     working_df = working_df.sort('score', descending=True)
     fdr_raw = (
-        (working_df['TD'].cast(pl.Int8).cum_sum() - working_df['DD'].cast(pl.Int8).cum_sum())
-        / working_df['TT'].cast(pl.Int8).cum_sum()
+        (working_df['TD'].cast(pl.Int32).cum_sum() - working_df['DD'].cast(pl.Int32).cum_sum())
+        / working_df['TT'].cast(pl.Int32).cum_sum()
     )
     working_df = working_df.with_columns(
-        fdr = fdr_raw.reverse().cum_min().reverse()
+        fdr = fdr_raw.clip(lower_bound=0).reverse().cum_min().reverse()
     )
     return working_df.sort(order_col)['fdr']

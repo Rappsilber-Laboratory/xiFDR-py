@@ -212,12 +212,15 @@ def test_td_dd_ratio():
     )
     for fdr_group in ['self', 'between']:
         # Test too few TT in CSM level
-        n_td = min(len(x['csm'].filter('TD', pl.col('fdr_group') == fdr_group)), 10)
         n_dd = min(len(x['csm'].filter('DD', pl.col('fdr_group') == fdr_group)), 20)
         df = pl.concat([
             x['csm'].filter('TT', pl.col('fdr_group') == fdr_group),
-            x['csm'].filter('TD', pl.col('fdr_group') == fdr_group).sample(n_td, seed=0),
-            x['csm'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
+            x['csm'].sort('score', descending=True).filter(
+                'TD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd-1),
+            x['csm'].sort('score', descending=True).filter(
+                'DD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd),
             x['csm'].filter(pl.col('fdr_group') != fdr_group)
         ])
         with warnings.catch_warnings(record=True) as caught_warns:
@@ -233,12 +236,15 @@ def test_td_dd_ratio():
             assert len(td_dd_warn) == 1
 
         # Test too few TT in peptide level
-        n_td = min(len(x['csm'].filter('TD', pl.col('fdr_group') == fdr_group)), 10)
         n_dd = min(len(x['csm'].filter('DD', pl.col('fdr_group') == fdr_group)), 20)
         df = pl.concat([
             x['csm'].filter('TT', pl.col('fdr_group') == fdr_group),
-            x['csm'].filter('TD', pl.col('fdr_group') == fdr_group).sample(n_td, seed=0),
-            x['csm'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
+            x['csm'].sort('score', descending=True).filter(
+                'TD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd-1),
+            x['csm'].sort('score', descending=True).filter(
+                'DD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd),
             x['csm'].filter(pl.col('fdr_group') != fdr_group)
         ])
         with warnings.catch_warnings(record=True) as caught_warns:
@@ -256,12 +262,15 @@ def test_td_dd_ratio():
 
     for fdr_group in ['self', 'between']:
         # Test too few TT in link level
-        n_td = min(len(x['pep'].filter('TD', pl.col('fdr_group') == fdr_group)), 10)
         n_dd = min(len(x['pep'].filter('DD', pl.col('fdr_group') == fdr_group)), 20)
         df = pl.concat([
             x['pep'].filter('TT', pl.col('fdr_group') == fdr_group),
-            x['pep'].filter('TD', pl.col('fdr_group') == fdr_group).sample(n_td, seed=0),
-            x['pep'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
+            x['pep'].sort('score', descending=True).filter(
+                'TD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd-1),
+            x['pep'].sort('score', descending=True).filter(
+                'DD', pl.col('fdr_group') == fdr_group
+            ).sample(n_dd),
             x['pep'].filter(pl.col('fdr_group') != fdr_group)
         ])
         with warnings.catch_warnings(record=True) as caught_warns:
@@ -278,12 +287,18 @@ def test_td_dd_ratio():
             assert len(td_dd_warn) == 1
 
         # Test too few TT in PPI level
-        n_td = min(len(x['link'].filter('TD', pl.col('fdr_group') == fdr_group)), 10)
-        n_dd = min(len(x['link'].filter('DD', pl.col('fdr_group') == fdr_group)), 20)
+        n_dd = min(
+            len(x['link'].filter('DD', pl.col('fdr_group') == fdr_group)),
+            5
+        )
         df = pl.concat([
             x['link'].filter('TT', pl.col('fdr_group') == fdr_group),
-            x['link'].filter('TD', pl.col('fdr_group') == fdr_group).sample(n_td, seed=0),
-            x['link'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
+            x['link'].sort('score').filter(
+                'TD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd-1),
+            x['link'].sort('score', descending=True).filter(
+                'DD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd),
             x['link'].filter(pl.col('fdr_group') != fdr_group)
         ])
         with warnings.catch_warnings(record=True) as caught_warns:
