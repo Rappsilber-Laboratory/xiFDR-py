@@ -5,6 +5,9 @@ import polars as pl
 
 from xifdr.fdr import full_fdr, _csm_fdr, _pep_fdr, _prot_fdr, _link_fdr, _ppi_fdr
 
+from pathlib import Path
+FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sample_data.parquet"
+
 
 def test_standard_td_prob():
     agg = (pl.col('score')**2).sum().sqrt()
@@ -15,7 +18,7 @@ def test_standard_td_prob():
         pl.col('DD').get(0),
         pl.col('fdr_group').get(0),
     ]
-    samples = pl.read_parquet('fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     x = full_fdr(
         samples,
         csm_fdr=0.5,
@@ -198,7 +201,7 @@ def test_td_dd_ratio():
         pl.col('DD').get(0),
         pl.col('fdr_group').get(0),
     ]
-    samples = pl.read_parquet('fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     x = full_fdr(
         samples,
         csm_fdr=0.5,
