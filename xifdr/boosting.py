@@ -9,11 +9,17 @@ import polars as pl
 from contextlib import closing
 from multiprocessing import get_context
 import multiprocessing.dummy as mp_dummy
+import sys
 from .fdr import full_fdr
 from .utils.column_preparation import prepare_columns
 from .utils.knee_finder import find_knees
 
 logger = logging.getLogger(__name__)
+
+def is_gil_enabled():
+    if hasattr(sys, "_is_gil_enabled"):
+        return sys._is_gil_enabled()
+    return True
 
 def boost(df: pl.DataFrame,
           csm_fdr: (float, float) = (0.0, 1.0),
@@ -173,11 +179,16 @@ def boost_manhattan(df: pl.DataFrame,
         n_jobs = max(max_mem_cpu, 1)
         n_jobs = min(n_jobs, os.cpu_count())
         logger.info(f"Using {n_jobs} CPUs based on available memory.")
-    if n_jobs == 1:
-        mp = mp_dummy
+    if not is_gil_enabled():
+        logger.info(f"Using {n_jobs} threads (GIL disabled).")
+        pool_obj = mp_dummy.Pool(n_jobs)
+    elif n_jobs == 1:
+        pool_obj = mp_dummy.Pool(1)
     else:
-        mp = get_context('spawn')
-    with closing(mp.Pool(n_jobs)) as pool:
+        # spawn is the only method that reliably works across all OSs with PyInstaller
+        pool_obj = get_context('spawn').Pool(processes=n_jobs)
+
+    with closing(pool_obj) as pool:
         while True:
             grids = []
             for param_index in range(n_params):
