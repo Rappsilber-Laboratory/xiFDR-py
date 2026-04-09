@@ -141,26 +141,30 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
     df_ppi = _ppi_fdr(df_link, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
 
     # Back-fitler levels
+    df_ppi = df_ppi.with_columns(pass_threshold=pl.lit(True))
+
     df_link = df_link.join(
-        df_ppi.select(ppi_cols).with_columns(pass_threshold=pl.lit(True)),
+        df_ppi.select(*ppi_cols, 'pass_threshold'),
         on=ppi_cols,
         how='full',
     ).with_columns(
-        pl.col('pass_threshold').fill_null(pl.lit(False))
+        pass_threshold=pl.col('pass_threshold').fill_null(pl.lit(False))
     )
+
     df_pep = df_pep.join(
-        df_link.select(link_cols).with_columns(pass_threshold=pl.lit(True)),
+        df_link.select(*link_cols, 'pass_threshold'),
         on=link_cols,
         how='full',
     ).with_columns(
-        pl.col('pass_threshold').fill_null(pl.lit(False))
+        pass_threshold=pl.col('pass_threshold').fill_null(pl.lit(False))
     )
+
     df_csm = df_csm.join(
-        df_pep.select(pep_cols).with_columns(pass_threshold=pl.lit(True)),
+        df_pep.select(*pep_cols, 'pass_threshold'),
         on=pep_cols,
         how='full',
     ).with_columns(
-        pl.col('pass_threshold').fill_null(pl.lit(False))
+        pass_threshold=pl.col('pass_threshold').fill_null(pl.lit(False))
     )
 
     if filter_back:
@@ -189,18 +193,12 @@ def _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio):
     )
     df_csm = df_csm.filter(pl.col('csm_fdr') <= csm_fdr)
     for fdr_group in fdr_groups_csm_pep:
-        df_csm_tt = df_csm.filter(
-            pl.col('TT'),
+        target_group = df_csm.filter(
             pl.col('fdr_group') == fdr_group
         )
-        df_csm_td = df_csm.filter(
-            pl.col('TD'),
-            pl.col('fdr_group') == fdr_group
-        )
-        df_csm_dd = df_csm.filter(
-            pl.col('DD'),
-            pl.col('fdr_group') == fdr_group
-        )
+        df_csm_tt = target_group.filter(pl.col('TT'))
+        df_csm_td = target_group.filter(pl.col('TD'))
+        df_csm_dd = target_group.filter(pl.col('DD'))
         if len(df_csm_tt)*csm_fdr < td_prob:
             warnings.warn(f'Insufficient TT for CSM FDR in group {fdr_group}.')
             df_csm = df_csm.filter(pl.col('fdr_group') != fdr_group)
@@ -215,7 +213,7 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ra
     df_pep = df_csm.group_by(pep_cols).agg(
         *first_aggs,
         *[
-            pl.col(c).flatten()
+            pl.col(c).list.explode()
             for c in pep_merge_cols
         ],
         protein_score_p1=expression_utils.replace_input(agg, 'protein_score_p1'),
@@ -227,18 +225,12 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ra
     )
     df_pep = df_pep.filter(pl.col('pep_fdr') <= pep_fdr)
     for fdr_group in fdr_groups_csm_pep:
-        df_pep_tt = df_pep.filter(
-            pl.col('TT'),
+        target_group = df_pep.filter(
             pl.col('fdr_group') == fdr_group
         )
-        df_pep_td = df_pep.filter(
-            pl.col('TD'),
-            pl.col('fdr_group') == fdr_group
-        )
-        df_pep_dd = df_pep.filter(
-            pl.col('DD'),
-            pl.col('fdr_group') == fdr_group
-        )
+        df_pep_tt = target_group.filter(pl.col('TT'))
+        df_pep_td = target_group.filter(pl.col('TD'))
+        df_pep_dd = target_group.filter(pl.col('DD'))
         if len(df_pep_tt)*pep_fdr < td_prob:
             warnings.warn(f'Insufficient TT for peptide FDR in group {fdr_group}.')
             df_pep = df_pep.filter(pl.col('fdr_group') != fdr_group)
@@ -384,7 +376,7 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_
     ).group_by(link_cols).agg(
         *first_aggs,
         *[
-            pl.col(c).flatten()
+            pl.col(c).list.explode()
             for c in link_merge_cols
         ],
         score=agg
@@ -394,18 +386,12 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_
     )
     df_link = df_link.filter(pl.col('link_fdr') <= link_fdr)
     for fdr_group in fdr_groups_link_ppi:
-        df_link_tt = df_link.filter(
-            pl.col('TT'),
+        target_group = df_link.filter(
             pl.col('fdr_group') == fdr_group
         )
-        df_link_td = df_link.filter(
-            pl.col('TD'),
-            pl.col('fdr_group') == fdr_group
-        )
-        df_link_dd = df_link.filter(
-            pl.col('DD'),
-            pl.col('fdr_group') == fdr_group
-        )
+        df_link_tt = target_group.filter(pl.col('TT'))
+        df_link_td = target_group.filter(pl.col('TD'))
+        df_link_dd = target_group.filter(pl.col('DD'))
         if len(df_link_tt)*link_fdr < td_prob:
             warnings.warn(f'Insufficient TT for link FDR in group {fdr_group}.')
             df_link = df_link.filter(pl.col('fdr_group') != fdr_group)
@@ -444,7 +430,7 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_r
     df_ppi = df_ppi.group_by(ppi_cols).agg(
         *first_aggs,
         *[
-            pl.col(c).flatten()
+            pl.col(c).list.explode()
             for c in ppi_merge_cols
         ],
         score=agg
@@ -454,18 +440,12 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_r
     )
     df_ppi = df_ppi.filter(pl.col('ppi_fdr') <= ppi_fdr)
     for fdr_group in fdr_groups_link_ppi:
-        df_ppi_tt = df_ppi.filter(
-            pl.col('TT'),
+        target_group = df_ppi.filter(
             pl.col('fdr_group') == fdr_group
         )
-        df_ppi_td = df_ppi.filter(
-            pl.col('TD'),
-            pl.col('fdr_group') == fdr_group
-        )
-        df_ppi_dd = df_ppi.filter(
-            pl.col('DD'),
-            pl.col('fdr_group') == fdr_group
-        )
+        df_ppi_tt = target_group.filter(pl.col('TT'))
+        df_ppi_td = target_group.filter(pl.col('TD'))
+        df_ppi_dd = target_group.filter(pl.col('DD'))
         if len(df_ppi_tt)*ppi_fdr < td_prob:
             warnings.warn(f'Insufficient TT for PPI FDR in group {fdr_group}.')
             df_ppi = df_ppi.filter(pl.col('fdr_group') != fdr_group)
