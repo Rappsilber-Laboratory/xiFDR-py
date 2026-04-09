@@ -122,43 +122,33 @@ def prepare_columns(df):
     )
 
     # Swap peptides based on joined protein group
-    protein_p1_str = col('protein_p1').list.join(';')
-    protein_p2_str = col('protein_p2').list.join(';')
+    protein_p1_str = col('protein_p1').list.unique().list.sort().list.join(';')
+    protein_p2_str = col('protein_p2').list.unique().list.sort().list.join(';')
     link_pos_p1_str = col('link_pos_p1').cast(pl.String)
     link_pos_p2_str = col('link_pos_p2').cast(pl.String)
     cl_pos_p1_str = col('cl_pos_p1').cast(pl.List(pl.String)).list.join(';')
     cl_pos_p2_str = col('cl_pos_p2').cast(pl.List(pl.String)).list.join(';')
-    # Calculate paddings for joint swap string comparison
-    pad_prot = max(
-        df.select(protein_p1_str.str.len_chars()).to_series().max(),
-        df.select(protein_p2_str.str.len_chars()).to_series().max(),
+
+    # Generate swap mask using robust conditional cascades rather than string padding
+    swap_mask = pl.when(
+        col('fdr_group') == 'linear'
+    ).then(
+        pl.lit(False)
+    ).when(
+        protein_p1_str != protein_p2_str
+    ).then(
+        protein_p1_str > protein_p2_str
+    ).when(
+        cl_pos_p1_str != cl_pos_p2_str
+    ).then(
+        cl_pos_p1_str > cl_pos_p2_str
+    ).when(
+        link_pos_p1_str != link_pos_p2_str
+    ).then(
+        link_pos_p1_str > link_pos_p2_str
+    ).otherwise(
+        col('sequence_p1') > col('sequence_p2')
     )
-    pad_link = max(
-        df.select(link_pos_p1_str.str.len_chars()).to_series().max(),
-        df.select(link_pos_p2_str.str.len_chars()).to_series().max(),
-    )
-    pad_seq = max(
-        df.select(col('sequence_p1').str.len_chars()).to_series().max(),
-        df.select(col('sequence_p2').fill_null('').str.len_chars()).to_series().max(),
-    )
-    pad_cl = max(
-        df.select(cl_pos_p1_str.str.len_chars()).to_series().max(),
-        df.select(cl_pos_p2_str.str.len_chars()).to_series().max(),
-    )
-    # Generate swap mask
-    swap_mask = df.select(
-        (
-            protein_p1_str.str.pad_start(pad_prot,' ')+
-            cl_pos_p1_str.str.pad_start(pad_cl,' ')+
-            link_pos_p1_str.str.pad_start(pad_link,' ')+
-            col('sequence_p1').str.pad_start(pad_seq,' ')
-        ) > (
-            protein_p2_str.str.pad_start(pad_prot,' ')+
-            cl_pos_p2_str.str.pad_start(pad_cl,' ')+
-            link_pos_p2_str.str.pad_start(pad_link,' ')+
-            col('sequence_p2').str.pad_start(pad_seq,' ')
-        )
-    ).to_series()
     # Swap peptide specific columns
     pair_cols1 = ['sequence_p1', 'protein_p1', 'start_pos_p1', 'link_pos_p1', 'cl_pos_p1', 'decoy_p1']
     pair_cols2 = ['sequence_p2', 'protein_p2', 'start_pos_p2', 'link_pos_p2', 'cl_pos_p2', 'decoy_p2']
