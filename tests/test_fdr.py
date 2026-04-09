@@ -8,6 +8,9 @@ from xifdr.boosting import boost
 
 logging.basicConfig(level=logging.DEBUG)
 
+from pathlib import Path
+FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sample_data.parquet"
+
 def test_single_fdr_large():
     tt_arr = np.arange(10_000).astype(float)
     td_arr = np.arange(10_000).astype(float)
@@ -131,7 +134,7 @@ def test_single_fdr_monotone():
 
 
 def test_full_fdr():
-    samples = pl.read_parquet('fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     x = full_fdr(
         samples,
         csm_fdr=0.5,
@@ -148,7 +151,7 @@ def test_full_fdr():
 
 def test_full_fdr_consistency():
     from xifdr.fdr import pep_cols, link_cols, ppi_cols
-    samples = pl.read_parquet('fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     results = full_fdr(
         samples,
         csm_fdr=0.1,
@@ -185,7 +188,7 @@ def test_full_fdr_consistency():
 
 
 def test_len_filter():
-    samples = pl.read_parquet('fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     x = full_fdr(
         samples,
         csm_fdr=1.0,
@@ -206,7 +209,7 @@ def test_len_filter():
     pass
 
 def test_full_fdr_linear():
-    samples = pl.read_parquet('fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     samples = samples.with_columns(
         make_linear=np.random.choice([False, True], p=[0.9, 0.1], size=len(samples))
     ).with_columns(
@@ -259,7 +262,7 @@ def test_full_fdr_linear():
 
 @pytest.mark.slow
 def test_boosting():
-    samples = pl.read_parquet('fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     fdrs = boost(
         samples,
         csm_fdr=(0, 0.2),
@@ -271,7 +274,7 @@ def test_boosting():
     print(fdrs)
 
 def test_column_boost():
-    samples = pl.read_parquet('fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     samples = samples.with_columns(coverage=pl.col('coverage_p1')+pl.col('coverage_p2'))
     cutoffs = boost(
         samples,
