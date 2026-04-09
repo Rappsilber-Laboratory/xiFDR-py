@@ -5,6 +5,9 @@ import polars as pl
 
 from xifdr.fdr import full_fdr, _csm_fdr, _pep_fdr, _prot_fdr, _link_fdr, _ppi_fdr
 
+from pathlib import Path
+FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sample_data.parquet"
+
 
 def test_standard_td_prob():
     agg = (pl.col('score')**2).sum().sqrt()
@@ -15,7 +18,7 @@ def test_standard_td_prob():
         pl.col('DD').get(0),
         pl.col('fdr_group').get(0),
     ]
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     x = full_fdr(
         samples,
         csm_fdr=0.5,
@@ -188,7 +191,7 @@ def test_protein_td_only_supp():
     assert res.filter(pl.col('protein_fdr_group') == 'self_or_linear').height == 0
     assert res.filter(pl.col('protein_fdr_group') == 'invalid_merged').height == 0
 
-def test_td_dd_retio():
+def test_td_dd_ratio():
     warnings.simplefilter("always")
     agg = (pl.col('score')**2).sum().sqrt()
     never_aggs = ['fdr_group', 'decoy_class', 'TT', 'TD', 'DD', 'score', 'protein_score_p1', 'protein_score_p2']
@@ -198,7 +201,7 @@ def test_td_dd_retio():
         pl.col('DD').get(0),
         pl.col('fdr_group').get(0),
     ]
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     x = full_fdr(
         samples,
         csm_fdr=0.5,
@@ -209,12 +212,15 @@ def test_td_dd_retio():
     )
     for fdr_group in ['self', 'between']:
         # Test too few TT in CSM level
-        n_td = min(len(x['csm'].filter('TD', pl.col('fdr_group') == fdr_group)), 10)
         n_dd = min(len(x['csm'].filter('DD', pl.col('fdr_group') == fdr_group)), 20)
         df = pl.concat([
             x['csm'].filter('TT', pl.col('fdr_group') == fdr_group),
-            x['csm'].filter('TD', pl.col('fdr_group') == fdr_group).sample(n_td, seed=0),
-            x['csm'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
+            x['csm'].sort('score', descending=True).filter(
+                'TD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd-1),
+            x['csm'].sort('score', descending=True).filter(
+                'DD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd),
             x['csm'].filter(pl.col('fdr_group') != fdr_group)
         ])
         with warnings.catch_warnings(record=True) as caught_warns:
@@ -230,12 +236,15 @@ def test_td_dd_retio():
             assert len(td_dd_warn) == 1
 
         # Test too few TT in peptide level
-        n_td = min(len(x['csm'].filter('TD', pl.col('fdr_group') == fdr_group)), 10)
         n_dd = min(len(x['csm'].filter('DD', pl.col('fdr_group') == fdr_group)), 20)
         df = pl.concat([
             x['csm'].filter('TT', pl.col('fdr_group') == fdr_group),
-            x['csm'].filter('TD', pl.col('fdr_group') == fdr_group).sample(n_td, seed=0),
-            x['csm'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
+            x['csm'].sort('score', descending=True).filter(
+                'TD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd-1),
+            x['csm'].sort('score', descending=True).filter(
+                'DD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd),
             x['csm'].filter(pl.col('fdr_group') != fdr_group)
         ])
         with warnings.catch_warnings(record=True) as caught_warns:
@@ -253,12 +262,15 @@ def test_td_dd_retio():
 
     for fdr_group in ['self', 'between']:
         # Test too few TT in link level
-        n_td = min(len(x['pep'].filter('TD', pl.col('fdr_group') == fdr_group)), 10)
         n_dd = min(len(x['pep'].filter('DD', pl.col('fdr_group') == fdr_group)), 20)
         df = pl.concat([
             x['pep'].filter('TT', pl.col('fdr_group') == fdr_group),
-            x['pep'].filter('TD', pl.col('fdr_group') == fdr_group).sample(n_td, seed=0),
-            x['pep'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
+            x['pep'].sort('score', descending=True).filter(
+                'TD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd-1),
+            x['pep'].sort('score', descending=True).filter(
+                'DD', pl.col('fdr_group') == fdr_group
+            ).sample(n_dd),
             x['pep'].filter(pl.col('fdr_group') != fdr_group)
         ])
         with warnings.catch_warnings(record=True) as caught_warns:
@@ -275,12 +287,18 @@ def test_td_dd_retio():
             assert len(td_dd_warn) == 1
 
         # Test too few TT in PPI level
-        n_td = min(len(x['link'].filter('TD', pl.col('fdr_group') == fdr_group)), 10)
-        n_dd = min(len(x['link'].filter('DD', pl.col('fdr_group') == fdr_group)), 20)
+        n_dd = min(
+            len(x['link'].filter('DD', pl.col('fdr_group') == fdr_group)),
+            5
+        )
         df = pl.concat([
             x['link'].filter('TT', pl.col('fdr_group') == fdr_group),
-            x['link'].filter('TD', pl.col('fdr_group') == fdr_group).sample(n_td, seed=0),
-            x['link'].filter('DD', pl.col('fdr_group') == fdr_group).sample(n_dd, seed=0),
+            x['link'].sort('score').filter(
+                'TD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd-1),
+            x['link'].sort('score', descending=True).filter(
+                'DD', pl.col('fdr_group') == fdr_group
+            ).head(n_dd),
             x['link'].filter(pl.col('fdr_group') != fdr_group)
         ])
         with warnings.catch_warnings(record=True) as caught_warns:

@@ -6,11 +6,13 @@ name = "pypi"
 [packages]
 pandas = "*"
 polars = "*"
+xifdr = {file = ".", editable = true}
 
 [dev-packages]
 sphinx = "*"
 sphinx-autodoc-typehints = "*"
 sphinx-rtd-theme = "*"
+pytest = "*"
 
 [requires]
 python_version = "3.13"

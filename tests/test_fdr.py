@@ -8,6 +8,9 @@ from xifdr.boosting import boost
 
 logging.basicConfig(level=logging.DEBUG)
 
+from pathlib import Path
+FIXTURE_PATH = Path(__file__).parent / "fixtures" / "sample_data.parquet"
+
 def test_single_fdr_large():
     tt_arr = np.arange(10_000).astype(float)
     td_arr = np.arange(10_000).astype(float)
@@ -131,7 +134,7 @@ def test_single_fdr_monotone():
 
 
 def test_full_fdr():
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     x = full_fdr(
         samples,
         csm_fdr=0.5,
@@ -140,11 +143,52 @@ def test_full_fdr():
         link_fdr=0.05,
         ppi_fdr=0.05
     )
-    pass
+    assert 'csm' in x
+    assert 'pep' in x
+    assert 'link' in x
+    assert 'ppi' in x
+
+
+def test_full_fdr_consistency():
+    from xifdr.fdr import pep_cols, link_cols, ppi_cols
+    samples = pl.read_parquet(FIXTURE_PATH)
+    results = full_fdr(
+        samples,
+        csm_fdr=0.1,
+        pep_fdr=0.1,
+        prot_fdr=0.1,
+        link_fdr=0.1,
+        ppi_fdr=0.1,
+        filter_back=True
+    )
+
+    csm = results['csm']
+    pep = results['pep']
+    link = results['link']
+    ppi = results['ppi']
+
+    # 1. Check if any CSM has no corresponding peptide in the pep results
+    missing_pep = csm.join(pep, on=pep_cols, how='anti')
+    assert len(missing_pep) == 0, "Some CSMs do not have a corresponding Peptide match"
+
+    # 2. Check if any peptide has no corresponding link in the link results
+    # Filter out linear peptides as they don't have links
+    pep_no_linear = pep.filter(pl.col('fdr_group') != 'linear')
+    missing_link = pep_no_linear.join(link, on=link_cols, how='anti')
+    assert len(missing_link) == 0, "Some non-linear Peptides do not have a corresponding Link match"
+
+    # 3. Check if any link has no corresponding PPI in the ppi results
+    missing_ppi = link.join(ppi, on=ppi_cols, how='anti')
+    assert len(missing_ppi) == 0, "Some Links do not have a corresponding PPI match"
+
+    # 4. Ensure no null rows were introduced by joins
+    assert csm['score'].is_null().sum() == 0
+    assert pep['score'].is_null().sum() == 0
+    assert link['score'].is_null().sum() == 0
 
 
 def test_len_filter():
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     x = full_fdr(
         samples,
         csm_fdr=1.0,
@@ -165,7 +209,7 @@ def test_len_filter():
     pass
 
 def test_full_fdr_linear():
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     samples = samples.with_columns(
         make_linear=np.random.choice([False, True], p=[0.9, 0.1], size=len(samples))
     ).with_columns(
@@ -218,7 +262,7 @@ def test_full_fdr_linear():
 
 @pytest.mark.slow
 def test_boosting():
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     fdrs = boost(
         samples,
         csm_fdr=(0, 0.2),
@@ -230,7 +274,7 @@ def test_boosting():
     print(fdrs)
 
 def test_column_boost():
-    samples = pl.read_parquet('tests/fixtures/sample_data.parquet')
+    samples = pl.read_parquet(FIXTURE_PATH)
     samples = samples.with_columns(coverage=pl.col('coverage_p1')+pl.col('coverage_p2'))
     cutoffs = boost(
         samples,
