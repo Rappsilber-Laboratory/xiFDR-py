@@ -13,10 +13,10 @@ license = { text = "AGPL-3.0-or-later" }
 readme = "README.rst"
 requires-python = ">=3.9"
 dependencies = [
-    "numpy",
-    "pandas",
+    "numpy>=2.1.0",
+    "pandas>=3.0.0",
     "polars",
-    "scipy",
+    "scipy>=1.15.0",
     "psutil",
     "pyarrow",
     "setuptools_scm",
