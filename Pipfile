@@ -6,7 +6,11 @@ name = "pypi"
 [packages]
 pandas = ">=3.0.0"
 polars = {file = "https://github.com/Rappsilber-Laboratory/polars-free-threaded/releases/download/v1.36.0-beta.2-ft/polars-1.36.0b2-py3-none-any.whl"}
-polars-runtime-32 = {file = "https://github.com/Rappsilber-Laboratory/polars-free-threaded/releases/download/v1.36.0-beta.2-ft/polars_runtime_32-1.36.0b2-cp313-cp313t-macosx_11_0_arm64.whl"}
+polars-runtime-32 = [
+  {file = "https://github.com/Rappsilber-Laboratory/polars-free-threaded/releases/download/v1.36.0-beta.2-ft/polars_runtime_32-1.36.0b2-cp313-cp313t-macosx_11_0_arm64.whl", sys_platform = "== 'darwin'", markers = "platform_machine == 'arm64'"},
+  {file = "https://github.com/Rappsilber-Laboratory/polars-free-threaded/releases/download/v1.36.0-beta.2-ft/polars_runtime_32-1.36.0b2-cp313-cp313t-manylinux_2_39_x86_64.whl", sys_platform = "== 'linux'", markers = "platform_machine == 'x86_64'"},
+  {file = "https://github.com/Rappsilber-Laboratory/polars-free-threaded/releases/download/v1.36.0-beta.2-ft/polars_runtime_32-1.36.0b2-cp313-cp313t-win_amd64.whl", sys_platform = "== 'win32'"}
+]
 numpy = ">=2.1.0"
 scipy = ">=1.15.0"
 psutil = "*"
@@ -22,7 +26,6 @@ pytest = "*"
 
 [requires]
 python_version = "3.13"
-python_full_version = "3.13.1t"
 
 [pipenv]
 allow_prereleases = true
