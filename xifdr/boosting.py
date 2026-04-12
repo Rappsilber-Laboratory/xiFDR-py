@@ -112,6 +112,44 @@ def boost_manhattan(df: pl.DataFrame,
                     points: int = 10,
                     n_jobs: int = -1,
                     **kwargs):
+    """
+    Core Entry point for Manhattan optimization of FDR.
+
+    Parameters
+    ----------
+    df
+        Input CSM/PSM dataframe
+    csm_fdr
+        Range of CSM-level FDR cutoffs
+    pep_fdr
+        Range of peptide-level FDR cutoffs
+    prot_fdr
+        Range of protein-level FDR cutoffs
+    link_fdr
+        Range of link-level FDR cutoffs
+    ppi_fdr
+        Range of protein pair level (PPI) FDR cutoffs
+    boost_cols
+        Columns where a HIGHER value is better (e.g. scores)
+    neg_boost_cols
+        Columns where a LOWER value is better (e.g. Mass Error)
+    boost_level
+        The FDR level to optimize for ('csm', 'pep', 'prot', 'link', 'ppi')
+    boost_between
+        Optimize only for between-protein links
+    countdown
+        Number of iterations without improvement before stopping
+    points
+        Grid points for Manhattan search
+    n_jobs
+        Number of parallel jobs. -1 for all available cores or automatic detection based on memory.
+    kwargs
+        Other parameters to be passed to `full_fdr`
+
+    Returns
+    -------
+        Best parameters found for the optimization
+    """
     df = prepare_columns(df)
     param_ranges = (
         csm_fdr,
@@ -266,6 +304,7 @@ def boost_manhattan(df: pl.DataFrame,
 
 def _optimization_template(cutoffs,
                            df: pl.DataFrame,
+                           decoy_adjunct: str = 'REV_',
                            min_len: int = 5,
                            unique_csm: bool = True,
                            boost_cols: list = [],
@@ -274,7 +313,44 @@ def _optimization_template(cutoffs,
                            boost_between: bool = True,
                            td_prob: int = 2,
                            td_prot_prob: int = 10,
-                           td_dd_ratio: float = 1.0) -> float:
+                           td_dd_ratio: float = 1.0,
+                           custom_aggs: dict = None) -> float:
+    """
+    Template for parallel optimization and calculation of the score.
+
+    Parameters
+    ----------
+    cutoffs
+        A list of cutoffs for the different levels
+    df
+        The input CSM dataframe
+    decoy_adjunct
+        The prefix/suffix for decoy proteins
+    min_len
+        Minimum peptide length
+    unique_csm
+        Unique CSM aggregation
+    boost_cols
+        Columns to filter for HIGHER values
+    neg_boost_cols
+        Columns to filter for LOWER values
+    boost_level
+        The level to optimize for
+    boost_between
+        Optimize for between links
+    td_prob
+        Minimum threshold for TT/TD counts (except protein)
+    td_prot_prob
+        Minimum threshold for TT/TD counts on protein level
+    td_dd_ratio
+        Minimum ratio for matching DD/TD
+    custom_aggs
+        Custom aggregation expressions for the FDR levels
+
+    Returns
+    -------
+        Resulting score (negative estimated true positives)
+    """
     fdrs = cutoffs[:5]
     col_levels = cutoffs[5:]
     neg_col_levels = col_levels[len(boost_cols):]
@@ -296,12 +372,14 @@ def _optimization_template(cutoffs,
         )
     result_all = full_fdr(
         df, *fdrs,
+        decoy_adjunct=decoy_adjunct,
         min_len=min_len,
         unique_csm=unique_csm,
         prepare_column=False,
         td_prob=0,
         td_prot_prob=td_prot_prob,
-        td_dd_ratio=0
+        td_dd_ratio=0,
+        custom_aggs=custom_aggs
     )
     result = result_all[boost_level]
     if boost_between:
