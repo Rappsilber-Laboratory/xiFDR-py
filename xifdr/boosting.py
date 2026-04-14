@@ -32,6 +32,7 @@ def boost(df: pl.DataFrame,
           boost_level: str = "ppi",
           boost_between: bool = True,
           method: str = "manhattan",
+          decoy_adjunct: str = "REV_",
           countdown: int = 3,
           points: int = 10,
           n_jobs: int = -1,
@@ -90,6 +91,7 @@ def boost(df: pl.DataFrame,
             neg_boost_cols=neg_boost_cols,
             boost_level=boost_level,
             boost_between=boost_between,
+            decoy_adjunct=decoy_adjunct,
             countdown=countdown,
             points=points,
             n_jobs=n_jobs,
@@ -108,6 +110,7 @@ def boost_manhattan(df: pl.DataFrame,
                     neg_boost_cols: list = None,
                     boost_level: str = "ppi",
                     boost_between: bool = True,
+                    decoy_adjunct: str = "REV_",
                     countdown: int = 3,
                     points: int = 10,
                     n_jobs: int = -1,
@@ -150,7 +153,7 @@ def boost_manhattan(df: pl.DataFrame,
     -------
         Best parameters found for the optimization
     """
-    df = prepare_columns(df)
+    df = prepare_columns(df, decoy_adjunct=decoy_adjunct)
     param_ranges = (
         csm_fdr,
         pep_fdr,
@@ -171,8 +174,11 @@ def boost_manhattan(df: pl.DataFrame,
         best_params += [maxi]
 
     # Figure out knee points for starting
-    df = prepare_columns(df)
-    knee_points = find_knees(df.filter(pl.col ('fdr_group') == 'between'), **kwargs)
+    knee_points = find_knees(
+        df.filter(pl.col ('fdr_group') == 'between'),
+        decoy_adjunct=decoy_adjunct,
+        **kwargs
+    )
     for i, p in enumerate(knee_points):
         best_params[i] = p
         # Clip to param max
@@ -205,6 +211,7 @@ def boost_manhattan(df: pl.DataFrame,
         neg_boost_cols=neg_boost_cols,
         boost_level=boost_level,
         boost_between=boost_between,
+        decoy_adjunct=decoy_adjunct,
         **kwargs
     )
 
