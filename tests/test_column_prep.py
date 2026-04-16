@@ -56,3 +56,6 @@ def test_column_prep():
 
     df_res = prepare_columns(df)
     assert_frame_equal(df_res, df_expect.select(df_res.columns))
+    # Check that the resulting state is constant
+    df_res = prepare_columns(df)
+    assert_frame_equal(df_res, df_expect.select(df_res.columns))
