@@ -358,6 +358,7 @@ def _optimization_template(cutoffs,
     -------
         Resulting score (negative estimated true positives)
     """
+    df_height = df.height
     fdrs = cutoffs[:5]
     col_levels = cutoffs[5:]
     neg_col_levels = col_levels[len(boost_cols):]
@@ -412,6 +413,6 @@ def _optimization_template(cutoffs,
             td_prob_bad = gl_tt*cutoffs[li] < td_prob
             dd_prob_bad = gl_dd*td_dd_ratio > gl_td
             if td_prob_bad or dd_prob_bad:
-                return -tp/df.height
+                return -tp/df_height
 
     return -tp
