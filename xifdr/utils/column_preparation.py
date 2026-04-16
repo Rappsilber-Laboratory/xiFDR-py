@@ -149,9 +149,14 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
         pl.exclude(['_tmp_respair_swap_protein_p2', '_tmp_respair_swap_cl_pos_p2']).first()
     ).drop('_tmp_join')
 
+    df = df.with_columns(
+        pl.col(['protein_p1', 'protein_p2']).list.unique().list.sort().name.prefix('_tmp_ppi_swap_'),
+    )
+
     swap_cmp_cols = [
         (f"{c}_p1", f"{c}_p2")
         for c in [
+            '_tmp_ppi_swap_protein',
             '_tmp_respair_swap_protein',
             '_tmp_respair_swap_cl_pos',
             'protein',
@@ -165,13 +170,16 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
     swap_cond = pl.when(pl.lit(False)).then(pl.lit(None))
     for c1, c2 in swap_cmp_cols:
         c21_list = pl.concat_list([c2, c1])
-        c12_list = pl.concat_list([c2, c1])
+        c12_list = pl.concat_list([c1, c2])
         swap_cond = swap_cond.when(
-            c21_list != c21_list.sort() 
+            # Test if columns need swapping
+            c12_list != c12_list.list.sort()
         ).then(pl.lit(True))
         swap_cond = swap_cond.when(
-            c12_list != c12_list.sort() 
+            # Test if columns differ and we can stop here
+            c12_list != c21_list
         ).then(pl.lit(False))
+        # If columns are equal we need to continue comparing
     swap_cond = swap_cond.otherwise(pl.lit(False))
 
     # Swap peptide specific columns

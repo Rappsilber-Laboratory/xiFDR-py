@@ -412,31 +412,7 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_
 
 def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
     ppi_merge_cols = [c for c in df_link.columns if c not in ppi_cols+never_agg_cols]
-    df_ppi = df_link.with_columns(
-        protein_p1_join=pl.col('protein_p1').list.unique().list.sort().list.join(';'),
-        protein_p2_join=pl.col('protein_p2').list.unique().list.sort().list.join(';'),
-    )
-    swaplist1_ = [
-        c for c in sorted(df_link.columns) if (
-            c.endswith('_p1') and c.replace('_p1', '_p2') in df_link.columns
-        )
-    ]
-    swaplist2_ = [
-        c for c in sorted(df_link.columns) if (
-            c.endswith('_p2') and c.replace('_p2', '_p1') in df_link.columns
-        )
-    ]
-    swaplist1 = swaplist1_ + swaplist2_
-    swaplist2 = swaplist2_ + swaplist1_
-    df_ppi = df_ppi.with_columns(
-        **{  # Swap proteins again after unique
-            c1: pl.when(
-                pl.col('protein_p1_join') > pl.col('protein_p2_join')
-            ).then(pl.col(c2)).otherwise(pl.col(c1))
-            for c1, c2 in zip(swaplist1, swaplist2)
-        },
-    )
-    df_ppi = df_ppi.group_by(ppi_cols).agg(
+    df_ppi = df_link.group_by(ppi_cols).agg(
         *first_aggs,
         *[
             pl.col(c).list.explode()
