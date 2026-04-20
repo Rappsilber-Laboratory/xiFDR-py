@@ -192,7 +192,10 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
            pl.when(swap_cond).then(pl.col(c1)).otherwise(pl.col(c2)).alias(c2),
         )
     
-    df = df.drop(pl.selectors.matches('^_tmp_respair_swap_'))
+    df = df.drop(
+        pl.selectors.matches('^_tmp_respair_swap_'),
+        pl.selectors.matches('^_tmp_ppi_swap_protein_'),
+    )
 
     # Calculate one-hot encoded target/decoy labels
     df = df.with_columns(
