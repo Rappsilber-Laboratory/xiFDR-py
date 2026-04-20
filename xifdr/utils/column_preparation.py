@@ -126,6 +126,22 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
             coverage_p2 = pl.lit(0.5),
         )
 
+
+    # Fill in infinite scores
+    max_score = df.filter(pl.col('score') < np.inf)['score'].max()
+    min_score = df.filter(pl.col('score') > -np.inf)['score'].min()
+    inf_margin = (max_score-min_score)*0.1
+    df = df.with_columns(pl.col('score') - min_score + inf_margin)
+    df = df.with_columns(
+        score=pl.when(pl.col('score') == np.inf).then(
+            pl.lit(max_score) + 2*pl.lit(inf_margin)
+        ).when(pl.col('score') == -np.inf).then(
+            pl.lit(0)
+        ).otherwise(
+            pl.col('score')
+        )
+    )
+
     coverage_p1_prop = pl.col('coverage_p1') / (pl.col('coverage_p1') + pl.col('coverage_p2'))
     coverage_p2_prop = pl.col('coverage_p2') / (pl.col('coverage_p1') + pl.col('coverage_p2'))
     df = df.with_columns(
@@ -202,21 +218,6 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
         TT=(pl.col('decoy_class')=='TT'),
         TD=(pl.col('decoy_class')=='TD'),
         DD=(pl.col('decoy_class')=='DD'),
-    )
-
-    # Fill in infinite scores
-    max_score = df.filter(pl.col('score') < np.inf)['score'].max()
-    min_score = df.filter(pl.col('score') > -np.inf)['score'].min()
-    inf_margin = (max_score-min_score)*0.1
-    df = df.with_columns(pl.col('score') - min_score + inf_margin)
-    df = df.with_columns(
-        score=pl.when(pl.col('score') == np.inf).then(
-            pl.lit(max_score) + 2*pl.lit(inf_margin)
-        ).when(pl.col('score') == -np.inf).then(
-            pl.lit(0)
-        ).otherwise(
-            pl.col('score')
-        )
     )
 
     df = df.with_columns(
