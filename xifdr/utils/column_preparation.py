@@ -1,6 +1,5 @@
 import numpy as np
 import polars as pl
-from datetime import datetime
 
 def prepare_columns(df, decoy_adjunct:str = 'REV_'):
     """Prepares and processes a Polars DataFrame for protein-protein interaction analysis.
@@ -202,10 +201,14 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
     pair_cols1 = ['sequence_p1', 'protein_p1', 'start_pos_p1', 'link_pos_p1', 'cl_pos_p1', 'coverage_p1', 'decoy_p1']
     pair_cols2 = ['sequence_p2', 'protein_p2', 'start_pos_p2', 'link_pos_p2', 'cl_pos_p2', 'coverage_p2', 'decoy_p2']
 
+    df = df.with_columns(
+        group_swapped = swap_cond
+    )
+
     for c1, c2 in zip(pair_cols1, pair_cols2):
         df = df.with_columns(
-           pl.when(swap_cond).then(pl.col(c2)).otherwise(pl.col(c1)).alias(c1),
-           pl.when(swap_cond).then(pl.col(c1)).otherwise(pl.col(c2)).alias(c2),
+            pl.when('group_swapped').then(pl.col(c2)).otherwise(pl.col(c1)).alias(c1),
+            pl.when('group_swapped').then(pl.col(c1)).otherwise(pl.col(c2)).alias(c2),
         )
     
     df = df.drop(
