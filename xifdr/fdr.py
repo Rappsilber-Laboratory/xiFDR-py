@@ -143,24 +143,27 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
     # Back-fitler levels
     df_ppi = df_ppi.with_columns(pass_threshold=pl.lit(True))
 
+    pass_on_cols = [pl.col('score').alias('ppi_score'), 'ppi_fdr', 'pass_threshold']
     df_link = df_link.join(
-        df_ppi.select(*ppi_cols, 'ppi_fdr', 'pass_threshold'),
+        df_ppi.select(*ppi_cols, *pass_on_cols),
         on=ppi_cols,
         how='full',
     ).with_columns(
         pass_threshold=pl.col('pass_threshold').fill_null(pl.lit(False))
     )
 
+    pass_on_cols += [pl.col('score').alias('link_score'), 'link_fdr']
     df_pep = df_pep.join(
-        df_link.select(*link_cols, 'ppi_fdr', 'link_fdr', 'pass_threshold'),
+        df_link.select(*link_cols, *pass_on_cols),
         on=link_cols,
         how='full',
     ).with_columns(
         pass_threshold=pl.col('pass_threshold').fill_null(pl.lit(False))
     )
 
+    pass_on_cols += [pl.col('score').alias('pep_score'), 'pep_fdr']
     df_csm = df_csm.join(
-        df_pep.select(*pep_cols, 'ppi_fdr', 'link_fdr', 'pep_fdr', 'pass_threshold'),
+        df_pep.select(*pep_cols, *pass_on_cols),
         on=pep_cols,
         how='full',
     ).with_columns(
