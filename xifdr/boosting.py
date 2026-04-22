@@ -9,11 +9,17 @@ import polars as pl
 from contextlib import closing
 from multiprocessing import get_context
 import multiprocessing.dummy as mp_dummy
+import sys
 from .fdr import full_fdr
 from .utils.column_preparation import prepare_columns
 from .utils.knee_finder import find_knees
 
 logger = logging.getLogger(__name__)
+
+def is_gil_enabled():
+    if hasattr(sys, "_is_gil_enabled"):
+        return sys._is_gil_enabled()
+    return True
 
 def boost(df: pl.DataFrame,
           csm_fdr: (float, float) = (0.0, 1.0),
@@ -26,6 +32,7 @@ def boost(df: pl.DataFrame,
           boost_level: str = "ppi",
           boost_between: bool = True,
           method: str = "manhattan",
+          decoy_adjunct: str = "REV_",
           countdown: int = 3,
           points: int = 10,
           n_jobs: int = -1,
@@ -84,6 +91,7 @@ def boost(df: pl.DataFrame,
             neg_boost_cols=neg_boost_cols,
             boost_level=boost_level,
             boost_between=boost_between,
+            decoy_adjunct=decoy_adjunct,
             countdown=countdown,
             points=points,
             n_jobs=n_jobs,
@@ -102,11 +110,50 @@ def boost_manhattan(df: pl.DataFrame,
                     neg_boost_cols: list = None,
                     boost_level: str = "ppi",
                     boost_between: bool = True,
+                    decoy_adjunct: str = "REV_",
                     countdown: int = 3,
                     points: int = 10,
                     n_jobs: int = -1,
                     **kwargs):
-    df = prepare_columns(df)
+    """
+    Core Entry point for Manhattan optimization of FDR.
+
+    Parameters
+    ----------
+    df
+        Input CSM/PSM dataframe
+    csm_fdr
+        Range of CSM-level FDR cutoffs
+    pep_fdr
+        Range of peptide-level FDR cutoffs
+    prot_fdr
+        Range of protein-level FDR cutoffs
+    link_fdr
+        Range of link-level FDR cutoffs
+    ppi_fdr
+        Range of protein pair level (PPI) FDR cutoffs
+    boost_cols
+        Columns where a HIGHER value is better (e.g. scores)
+    neg_boost_cols
+        Columns where a LOWER value is better (e.g. Mass Error)
+    boost_level
+        The FDR level to optimize for ('csm', 'pep', 'prot', 'link', 'ppi')
+    boost_between
+        Optimize only for between-protein links
+    countdown
+        Number of iterations without improvement before stopping
+    points
+        Grid points for Manhattan search
+    n_jobs
+        Number of parallel jobs. -1 for all available cores or automatic detection based on memory.
+    kwargs
+        Other parameters to be passed to `full_fdr`
+
+    Returns
+    -------
+        Best parameters found for the optimization
+    """
+    df = prepare_columns(df, decoy_adjunct=decoy_adjunct)
     param_ranges = (
         csm_fdr,
         pep_fdr,
@@ -127,8 +174,11 @@ def boost_manhattan(df: pl.DataFrame,
         best_params += [maxi]
 
     # Figure out knee points for starting
-    df = prepare_columns(df)
-    knee_points = find_knees(df.filter(pl.col ('fdr_group') == 'between'), **kwargs)
+    knee_points = find_knees(
+        df.filter(pl.col ('fdr_group') == 'between'),
+        decoy_adjunct=decoy_adjunct,
+        **kwargs
+    )
     for i, p in enumerate(knee_points):
         best_params[i] = p
         # Clip to param max
@@ -161,6 +211,7 @@ def boost_manhattan(df: pl.DataFrame,
         neg_boost_cols=neg_boost_cols,
         boost_level=boost_level,
         boost_between=boost_between,
+        decoy_adjunct=decoy_adjunct,
         **kwargs
     )
 
@@ -173,11 +224,16 @@ def boost_manhattan(df: pl.DataFrame,
         n_jobs = max(max_mem_cpu, 1)
         n_jobs = min(n_jobs, os.cpu_count())
         logger.info(f"Using {n_jobs} CPUs based on available memory.")
-    if n_jobs == 1:
-        mp = mp_dummy
+    if not is_gil_enabled():
+        logger.info(f"Using {n_jobs} threads (GIL disabled).")
+        pool_obj = mp_dummy.Pool(n_jobs)
+    elif n_jobs == 1:
+        pool_obj = mp_dummy.Pool(1)
     else:
-        mp = get_context('spawn')
-    with closing(mp.Pool(n_jobs)) as pool:
+        # spawn is the only method that reliably works across all OSs with PyInstaller
+        pool_obj = get_context('spawn').Pool(processes=n_jobs)
+
+    with closing(pool_obj) as pool:
         while True:
             grids = []
             for param_index in range(n_params):
@@ -255,6 +311,7 @@ def boost_manhattan(df: pl.DataFrame,
 
 def _optimization_template(cutoffs,
                            df: pl.DataFrame,
+                           decoy_adjunct: str = 'REV_',
                            min_len: int = 5,
                            unique_csm: bool = True,
                            boost_cols: list = [],
@@ -263,7 +320,45 @@ def _optimization_template(cutoffs,
                            boost_between: bool = True,
                            td_prob: int = 2,
                            td_prot_prob: int = 10,
-                           td_dd_ratio: float = 1.0) -> float:
+                           td_dd_ratio: float = 1.0,
+                           custom_aggs: dict = None) -> float:
+    """
+    Template for parallel optimization and calculation of the score.
+
+    Parameters
+    ----------
+    cutoffs
+        A list of cutoffs for the different levels
+    df
+        The input CSM dataframe
+    decoy_adjunct
+        The prefix/suffix for decoy proteins
+    min_len
+        Minimum peptide length
+    unique_csm
+        Unique CSM aggregation
+    boost_cols
+        Columns to filter for HIGHER values
+    neg_boost_cols
+        Columns to filter for LOWER values
+    boost_level
+        The level to optimize for
+    boost_between
+        Optimize for between links
+    td_prob
+        Minimum threshold for TT/TD counts (except protein)
+    td_prot_prob
+        Minimum threshold for TT/TD counts on protein level
+    td_dd_ratio
+        Minimum ratio for matching DD/TD
+    custom_aggs
+        Custom aggregation expressions for the FDR levels
+
+    Returns
+    -------
+        Resulting score (negative estimated true positives)
+    """
+    df_height = df.height
     fdrs = cutoffs[:5]
     col_levels = cutoffs[5:]
     neg_col_levels = col_levels[len(boost_cols):]
@@ -285,12 +380,14 @@ def _optimization_template(cutoffs,
         )
     result_all = full_fdr(
         df, *fdrs,
+        decoy_adjunct=decoy_adjunct,
         min_len=min_len,
         unique_csm=unique_csm,
         prepare_column=False,
         td_prob=0,
         td_prot_prob=td_prot_prob,
-        td_dd_ratio=0
+        td_dd_ratio=0,
+        custom_aggs=custom_aggs
     )
     result = result_all[boost_level]
     if boost_between:
@@ -316,6 +413,6 @@ def _optimization_template(cutoffs,
             td_prob_bad = gl_tt*cutoffs[li] < td_prob
             dd_prob_bad = gl_dd*td_dd_ratio > gl_td
             if td_prob_bad or dd_prob_bad:
-                return -tp/df.height
+                return -tp/df_height
 
     return -tp

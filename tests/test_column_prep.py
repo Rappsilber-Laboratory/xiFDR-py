@@ -34,8 +34,8 @@ def test_column_prep():
         "start_pos_p1": [[1], [1, 2], [1, 2, 3]],
         "protein_p2": [['C'], ['E', 'E', 'E'], ['F', 'X']],
         "start_pos_p2": [[1], [1, 1, 2], [2, 1]],
-        "link_pos_p1": [1, 2, 3],
-        "link_pos_p2": [7, 8, 9],
+        "link_pos_p1": [7, 2, 3],
+        "link_pos_p2": [1, 8, 9],
         "sequence_p1": ['ABC', 'DEF', 'GHI'],
         "sequence_p2": ['ABC', 'AAA', 'DEF'],
         "decoy_p1": [False, False, True],
@@ -43,16 +43,26 @@ def test_column_prep():
         "score": [0.2, 1.2, 2.2],
         "fdr_group": ['between', 'self', 'between'],
         "decoy_class": ['TT', 'TD', 'DD'],
-        "cl_pos_p1": [[1], [2, 3], [3, 4, 5]],
-        "cl_pos_p2": [[7], [8, 8, 9], [10, 9]],
+        "cl_pos_p1": [[7], [2, 3], [3, 4, 5]],
+        "cl_pos_p2": [[1], [8, 8, 9], [10, 9]],
         "TT": [True, False, False],
         "TD": [False, True, False],
         "DD": [False, False, True],
         "coverage_p1": [0.5, 0.5, 0.5],
         "coverage_p2": [0.5, 0.5, 0.5],
         "protein_score_p1": [0.1, 0.6, 1.1],
-        "protein_score_p2": [0.1, 0.6, 1.1]
+        "protein_score_p2": [0.1, 0.6, 1.1],
+        "group_swapped": [True, False, False],
     })
 
     df_res = prepare_columns(df)
-    assert_frame_equal(df_res, df_expect.select(df_res.columns))
+    assert_frame_equal(
+        df_res.select(df_expect.columns).sort(df_expect.columns),
+        df_expect.sort(df_expect.columns)
+    )
+    # Check that the resulting state is constant
+    df_res = prepare_columns(df)
+    assert_frame_equal(
+        df_res.sort(df_expect.columns),
+        df_expect.select(df_res.columns).sort(df_expect.columns)
+    )

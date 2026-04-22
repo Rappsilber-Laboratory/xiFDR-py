@@ -4,15 +4,21 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pandas = "*"
+pandas = ">=3.0.0"
 polars = "*"
-xifdr = {file = ".", editable = true}
+numpy = ">=2.1.0"
+scipy = ">=1.15.0"
+psutil = "*"
+maturin = "*"
+setuptools-rust = "*"
+kneed = "*"
 
 [dev-packages]
 sphinx = "*"
 sphinx-autodoc-typehints = "*"
 sphinx-rtd-theme = "*"
 pytest = "*"
+setuptools-scm = "*"
 
-[requires]
-python_version = "3.13"
+[pipenv]
+allow_prereleases = true

@@ -12,6 +12,12 @@ Use `pip` to install xiFDR from PyPi:
 
     $ pip install xifdr
 
+If you use a free threaded python version install with the nogil option:
+
+.. code-block:: shell
+
+    $ pip install 'xifdr[nogil]'
+
 Input format
 ------------
 

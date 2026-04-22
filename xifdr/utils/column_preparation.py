@@ -1,9 +1,7 @@
 import numpy as np
 import polars as pl
-from polars import col
 
-
-def prepare_columns(df):
+def prepare_columns(df, decoy_adjunct:str = 'REV_'):
     """Prepares and processes a Polars DataFrame for protein-protein interaction analysis.
 
     This function ensures the proper format of protein columns, calculates crosslink positions,
@@ -44,11 +42,10 @@ def prepare_columns(df):
     ]
     list_cols = list_cols_1 + list_cols_2
     for c in list_cols:
-        if not isinstance(df[c].dtype, pl.List):
+        if not df[c].dtype.is_nested():
             df = df.with_columns(
-                col(c).cast(pl.String).str.replace_all(
-                    '[ ]*',
-                    ''
+                pl.col(c).cast(pl.String).str.replace_all(
+                    '[ ]*', ''  # Remove all spaces
                 ).str.split(';')
             )
 
@@ -56,8 +53,8 @@ def prepare_columns(df):
     if 'fdr_group' not in df.columns:
         df = df.with_columns(
             fdr_group=(
-                (pl.col('protein_p1').list.set_intersection(
-                    pl.col('protein_p2')
+                (pl.col('protein_p1').list.eval(pl.element().str.replace(decoy_adjunct, '')).list.set_intersection(
+                    pl.col('protein_p2').list.eval(pl.element().str.replace(decoy_adjunct, ''))
                 ).list.len()==0).cast(pl.String).replace(
                     ['true', 'false'],
                     ['between', 'self']
@@ -75,110 +72,65 @@ def prepare_columns(df):
     if 'decoy_class' not in df.columns:
         df = df.with_columns(
             decoy_class=pl.when(
-                col('decoy_p1') & col('decoy_p2')
+                pl.col('decoy_p1') & pl.col('decoy_p2')
             ).then(
                 pl.lit('DD')
             ).when(
-                col('decoy_p1').not_() & col('decoy_p2').not_()
+                pl.col('decoy_p1') ^ pl.col('decoy_p2')
             ).then(
-                pl.lit('TT')
-            ).otherwise(
                 pl.lit('TD')
+            ).otherwise(
+                pl.lit('TT')
             )
         )
 
     # Sort list columns by protein group order
-    start_rank_p1 = pl.col('start_pos_p1').list.eval(pl.element().rank(method="dense"))
-    start_rank_p2 = pl.col('start_pos_p2').list.eval(pl.element().rank(method="dense"))
-    prot_rank_p1 = pl.col('protein_p1').list.eval(pl.element().rank(method="dense"))
-    prot_rank_p2 = pl.col('protein_p2').list.eval(pl.element().rank(method="dense"))
-    group_p1_rank = (
-        prot_rank_p1 * start_rank_p1.list.max().add(1) + start_rank_p1
-    )
-    group_p2_rank = (
-        prot_rank_p2 * start_rank_p2.list.max().add(1) + start_rank_p2
-    )
     df = df.with_columns(
-        col('protein_p2').fill_null([]),
-        col('start_pos_p2').fill_null([]),
-    )
-
-    df = df.with_columns(
-        [
-            col(c).list.gather(group_p1_rank.list.eval(pl.element().arg_sort()))
-            for c in list_cols_1
-        ]
+        pl.col(list_cols_1).fill_null(pl.lit([])),
+        pl.col(list_cols_2).fill_null(pl.lit([])),
     ).with_columns(
-        [
-            col(c).list.gather(group_p2_rank.list.eval(pl.element().arg_sort()))
-            for c in list_cols_2
-        ]
+        _tmp_join = pl.int_range(pl.len())  # Id range to reverse the explode
+    ).explode(list_cols_1).sort(
+        pl.col('protein_p1'),
+        pl.col('start_pos_p1')
+    ).group_by('_tmp_join', maintain_order=True).agg(
+        pl.col(list_cols_1).drop_nulls(),
+        pl.exclude(list_cols_1).first(),
+    ).explode(list_cols_2).sort(
+        pl.col('protein_p2'),
+        pl.col('start_pos_p2')
+    ).group_by('_tmp_join', maintain_order=True).agg(
+        pl.col(list_cols_2).drop_nulls(),
+        pl.exclude(list_cols_2).first(),
     )
+    #df = df.with_columns(
+    #    pl.col('protein_p2').fill_null([]),
+    #    pl.col('start_pos_p2').fill_null([]),
+    #).with_columns(
+    #    multi_list_sort(*list_cols_1)
+    #).with_columns(
+    #    multi_list_sort(*list_cols_2)
+    #)
 
     # Calculate crosslink position in protein
     df = df.with_columns(
-        cl_pos_p1 = col('start_pos_p1').cast(pl.List(pl.Int64)) + col('link_pos_p1') - 1,
-        cl_pos_p2 = col('start_pos_p2').cast(pl.List(pl.Int64)) + col('link_pos_p2') - 1,
+        cl_pos_p1 = pl.col('start_pos_p1').cast(pl.List(pl.Int64)) + pl.col('link_pos_p1') - 1,
+        cl_pos_p2 = pl.col('start_pos_p2').cast(pl.List(pl.Int64)) + pl.col('link_pos_p2') - 1,
     )
 
-    # Swap peptides based on joined protein group
-    protein_p1_str = col('protein_p1').list.unique().list.sort().list.join(';')
-    protein_p2_str = col('protein_p2').list.unique().list.sort().list.join(';')
-    link_pos_p1_str = col('link_pos_p1').cast(pl.String)
-    link_pos_p2_str = col('link_pos_p2').cast(pl.String)
-    cl_pos_p1_str = col('cl_pos_p1').cast(pl.List(pl.String)).list.join(';')
-    cl_pos_p2_str = col('cl_pos_p2').cast(pl.List(pl.String)).list.join(';')
-
-    # Generate swap mask using robust conditional cascades rather than string padding
-    swap_mask = pl.when(
-        col('fdr_group') == 'linear'
-    ).then(
-        pl.lit(False)
-    ).when(
-        protein_p1_str != protein_p2_str
-    ).then(
-        protein_p1_str > protein_p2_str
-    ).when(
-        cl_pos_p1_str != cl_pos_p2_str
-    ).then(
-        cl_pos_p1_str > cl_pos_p2_str
-    ).when(
-        link_pos_p1_str != link_pos_p2_str
-    ).then(
-        link_pos_p1_str > link_pos_p2_str
-    ).otherwise(
-        col('sequence_p1') > col('sequence_p2')
-    )
-    # Swap peptide specific columns
-    pair_cols1 = ['sequence_p1', 'protein_p1', 'start_pos_p1', 'link_pos_p1', 'cl_pos_p1', 'decoy_p1']
-    pair_cols2 = ['sequence_p2', 'protein_p2', 'start_pos_p2', 'link_pos_p2', 'cl_pos_p2', 'decoy_p2']
-    for c1, c2 in zip(pair_cols1, pair_cols2):
+    # Put in dummy coverage if none provided
+    if 'coverage_p1' not in df.columns or 'coverage_p2' not in df.columns:
         df = df.with_columns(
-           pl.when(swap_mask).then(col(c2)).otherwise(col(c1)).alias(c1),
-           pl.when(swap_mask).then(col(c1)).otherwise(col(c2)).alias(c2),
+            coverage_p1 = pl.lit(0.5),
+            coverage_p2 = pl.lit(0.5),
         )
 
-    # Calculate one-hot encoded target/decoy labels
-    df = df.with_columns(
-        TT=(pl.col('decoy_class')=='TT'),
-        TD=(pl.col('decoy_class')=='TD'),
-        DD=(pl.col('decoy_class')=='DD'),
-    )
-
-    # Calculate decoy_class column
-    df = df.with_columns(
-        decoy_class = pl.when(
-            col('decoy_p1') & (col('decoy_p2') | col('decoy_p2').is_null())
-        ).then(pl.lit('DD')).when(
-            (~col('decoy_p1')) & ((~col('decoy_p2')) | col('decoy_p2').is_null())
-        ).then(pl.lit('TT')).otherwise(pl.lit('TD'))
-    )
 
     # Fill in infinite scores
     max_score = df.filter(pl.col('score') < np.inf)['score'].max()
     min_score = df.filter(pl.col('score') > -np.inf)['score'].min()
     inf_margin = (max_score-min_score)*0.1
-    df = df.with_columns(col('score') - min_score + inf_margin)
+    df = df.with_columns(pl.col('score') - min_score + inf_margin)
     df = df.with_columns(
         score=pl.when(pl.col('score') == np.inf).then(
             pl.lit(max_score) + 2*pl.lit(inf_margin)
@@ -189,18 +141,91 @@ def prepare_columns(df):
         )
     )
 
-    # Put in dummy coverage if none provided
-    if 'coverage_p1' not in df.columns or 'coverage_p2' not in df.columns:
-        df = df.with_columns(
-            coverage_p1 = pl.lit(0.5),
-            coverage_p2 = pl.lit(0.5)
-        )
-
-    coverage_p1_prop = col('coverage_p1') / (col('coverage_p1') + col('coverage_p2'))
-    coverage_p2_prop = col('coverage_p2') / (col('coverage_p1') + col('coverage_p2'))
+    coverage_p1_prop = pl.col('coverage_p1') / (pl.col('coverage_p1') + pl.col('coverage_p2'))
+    coverage_p2_prop = pl.col('coverage_p2') / (pl.col('coverage_p1') + pl.col('coverage_p2'))
     df = df.with_columns(
-        protein_score_p1 = col('score') * coverage_p1_prop,
-        protein_score_p2 = col('score') * coverage_p2_prop
+        protein_score_p1 = pl.col('score') * coverage_p1_prop,
+        protein_score_p2 = pl.col('score') * coverage_p2_prop
+    )
+
+    # Swap peptides based on joined protein group
+    df = df.with_columns(
+        pl.col(['protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2']).name.prefix('_tmp_respair_swap_'),
+        _tmp_join = pl.int_range(pl.len()),
+    ).explode('_tmp_respair_swap_protein_p1', '_tmp_respair_swap_cl_pos_p1').unique(
+        subset=['_tmp_join', '_tmp_respair_swap_protein_p1', '_tmp_respair_swap_cl_pos_p1']
+    ).group_by('_tmp_join').agg(
+        pl.col(['_tmp_respair_swap_protein_p1', '_tmp_respair_swap_cl_pos_p1']).drop_nulls(),
+        pl.exclude(['_tmp_respair_swap_protein_p1', '_tmp_respair_swap_cl_pos_p1']).first()
+    ).explode('_tmp_respair_swap_protein_p2', '_tmp_respair_swap_cl_pos_p2').unique(
+        subset=['_tmp_join', '_tmp_respair_swap_protein_p2', '_tmp_respair_swap_cl_pos_p2']
+    ).group_by('_tmp_join').agg(
+        pl.col(['_tmp_respair_swap_protein_p2', '_tmp_respair_swap_cl_pos_p2']).drop_nulls(),
+        pl.exclude(['_tmp_respair_swap_protein_p2', '_tmp_respair_swap_cl_pos_p2']).first()
+    ).drop('_tmp_join')
+
+    df = df.with_columns(
+        pl.col(['protein_p1', 'protein_p2']).list.unique().list.sort().name.prefix('_tmp_ppi_swap_'),
+    )
+
+    swap_cmp_cols = [
+        (f"{c}_p1", f"{c}_p2")
+        for c in [
+            '_tmp_ppi_swap_protein',
+            '_tmp_respair_swap_protein',
+            '_tmp_respair_swap_cl_pos',
+            'protein',
+            'cl_pos',
+            'link_pos',
+            'sequence',
+        ]
+    ]
+
+    # Generate swap mask
+    swap_cond = pl.when(pl.lit(False)).then(pl.lit(None))
+    for c1, c2 in swap_cmp_cols:
+        c21_list = pl.concat_list([c2, c1])
+        c12_list = pl.concat_list([c1, c2])
+        swap_cond = swap_cond.when(
+            # Test if columns need swapping
+            c12_list != c12_list.list.sort()
+        ).then(pl.lit(True))
+        swap_cond = swap_cond.when(
+            # Test if columns differ and we can stop here
+            c12_list != c21_list
+        ).then(pl.lit(False))
+        # If columns are equal we need to continue comparing
+    swap_cond = swap_cond.otherwise(pl.lit(False))
+
+    # Swap peptide specific columns
+    pair_cols1 = ['sequence_p1', 'protein_p1', 'start_pos_p1', 'link_pos_p1', 'cl_pos_p1', 'coverage_p1', 'decoy_p1']
+    pair_cols2 = ['sequence_p2', 'protein_p2', 'start_pos_p2', 'link_pos_p2', 'cl_pos_p2', 'coverage_p2', 'decoy_p2']
+
+    df = df.with_columns(
+        group_swapped = swap_cond
+    )
+
+    for c1, c2 in zip(pair_cols1, pair_cols2):
+        df = df.with_columns(
+            pl.when('group_swapped').then(pl.col(c2)).otherwise(pl.col(c1)).alias(c1),
+            pl.when('group_swapped').then(pl.col(c1)).otherwise(pl.col(c2)).alias(c2),
+        )
+    
+    df = df.drop(
+        pl.selectors.matches('^_tmp_respair_swap_'),
+        pl.selectors.matches('^_tmp_ppi_swap_protein_'),
+    )
+
+    # Calculate one-hot encoded target/decoy labels
+    df = df.with_columns(
+        TT=(pl.col('decoy_class')=='TT'),
+        TD=(pl.col('decoy_class')=='TD'),
+        DD=(pl.col('decoy_class')=='DD'),
+    )
+
+    df = df.with_columns(
+        pl.col(list_cols_1).replace([], None),
+        pl.col(list_cols_2).replace([], None),
     )
 
     return df
