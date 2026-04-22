@@ -51,13 +51,14 @@ def test_column_prep():
         "coverage_p1": [0.5, 0.5, 0.5],
         "coverage_p2": [0.5, 0.5, 0.5],
         "protein_score_p1": [0.1, 0.6, 1.1],
-        "protein_score_p2": [0.1, 0.6, 1.1]
+        "protein_score_p2": [0.1, 0.6, 1.1],
+        "group_swapped": [True, False, False],
     })
 
     df_res = prepare_columns(df)
     assert_frame_equal(
-        df_res.sort(df_expect.columns),
-        df_expect.select(df_res.columns).sort(df_expect.columns)
+        df_res.select(df_expect.columns).sort(df_expect.columns),
+        df_expect.sort(df_expect.columns)
     )
     # Check that the resulting state is constant
     df_res = prepare_columns(df)
