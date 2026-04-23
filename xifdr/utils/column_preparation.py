@@ -30,8 +30,7 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
     - Ensures a positive score and assigns dummy coverage values if missing.
     - Computes proportional protein scores based on coverage.
     """
-    if not isinstance(df, pl.DataFrame):
-        df: pl.DataFrame = pl.DataFrame(df)
+    df_l = pl.LazyFrame(df)
 
     # Convert semicolon separated string columns to lists
     list_cols_1 = [
@@ -42,16 +41,20 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
     ]
     list_cols = list_cols_1 + list_cols_2
     for c in list_cols:
-        if not df[c].dtype.is_nested():
-            df = df.with_columns(
+        df = df_l.collect()
+        if not df.schema[c].is_nested():
+            df_l = df_l.with_columns(
                 pl.col(c).cast(pl.String).str.replace_all(
                     '[ ]*', ''  # Remove all spaces
                 ).str.split(';')
             )
+        df_l = df_l.with_columns(
+            pl.col(c).fill_null(pl.lit([])),
+        )
 
     # Generate fdr_group if not present
-    if 'fdr_group' not in df.columns:
-        df = df.with_columns(
+    if 'fdr_group' not in df_l.columns:
+        df_l = df_l.with_columns(
             fdr_group=(
                 (pl.col('protein_p1').list.eval(pl.element().str.replace(decoy_adjunct, '')).list.set_intersection(
                     pl.col('protein_p2').list.eval(pl.element().str.replace(decoy_adjunct, ''))
@@ -69,8 +72,8 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
         )
 
     # Create decoy_class column if not present
-    if 'decoy_class' not in df.columns:
-        df = df.with_columns(
+    if 'decoy_class' not in df_l.columns:
+        df_l = df_l.with_columns(
             decoy_class=pl.when(
                 pl.col('decoy_p1') & pl.col('decoy_p2')
             ).then(
@@ -84,98 +87,60 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
             )
         )
 
-    # Sort list columns by protein group order
-    df = df.with_columns(
-        pl.col(list_cols_1).fill_null(pl.lit([])),
-        pl.col(list_cols_2).fill_null(pl.lit([])),
-    ).with_columns(
-        _tmp_join = pl.int_range(pl.len())  # Id range to reverse the explode
-    ).explode(list_cols_1).sort(
-        pl.col('protein_p1'),
-        pl.col('start_pos_p1')
-    ).group_by('_tmp_join', maintain_order=True).agg(
-        pl.col(list_cols_1).drop_nulls(),
-        pl.exclude(list_cols_1).first(),
-    ).explode(list_cols_2).sort(
-        pl.col('protein_p2'),
-        pl.col('start_pos_p2')
-    ).group_by('_tmp_join', maintain_order=True).agg(
-        pl.col(list_cols_2).drop_nulls(),
-        pl.exclude(list_cols_2).first(),
-    )
-    #df = df.with_columns(
-    #    pl.col('protein_p2').fill_null([]),
-    #    pl.col('start_pos_p2').fill_null([]),
-    #).with_columns(
-    #    multi_list_sort(*list_cols_1)
-    #).with_columns(
-    #    multi_list_sort(*list_cols_2)
-    #)
-
-    # Calculate crosslink position in protein
-    df = df.with_columns(
-        cl_pos_p1 = pl.col('start_pos_p1').cast(pl.List(pl.Int64)) + pl.col('link_pos_p1') - 1,
-        cl_pos_p2 = pl.col('start_pos_p2').cast(pl.List(pl.Int64)) + pl.col('link_pos_p2') - 1,
+    # Calculate one-hot encoded target/decoy labels
+    df_l = df_l.with_columns(
+        TT=(pl.col('decoy_class')=='TT'),
+        TD=(pl.col('decoy_class')=='TD'),
+        DD=(pl.col('decoy_class')=='DD'),
     )
 
     # Put in dummy coverage if none provided
-    if 'coverage_p1' not in df.columns or 'coverage_p2' not in df.columns:
-        df = df.with_columns(
+    if 'coverage_p1' not in df_l.columns or 'coverage_p2' not in df_l.columns:
+        df_l = df_l.with_columns(
             coverage_p1 = pl.lit(0.5),
             coverage_p2 = pl.lit(0.5),
         )
 
+    # Calculate crosslink position in protein
+    df_l = df_l.with_columns(
+        cl_pos_p1 = pl.col('start_pos_p1').cast(pl.List(pl.Int64)) + pl.col('link_pos_p1') - 1,
+        cl_pos_p2 = pl.col('start_pos_p2').cast(pl.List(pl.Int64)) + pl.col('link_pos_p2') - 1,
+    )
 
-    # Fill in infinite scores
-    max_score = df.filter(pl.col('score') < np.inf)['score'].max()
-    min_score = df.filter(pl.col('score') > -np.inf)['score'].min()
-    inf_margin = (max_score-min_score)*0.1
-    df = df.with_columns(pl.col('score') - min_score + inf_margin)
-    df = df.with_columns(
-        score=pl.when(pl.col('score') == np.inf).then(
-            pl.lit(max_score) + 2*pl.lit(inf_margin)
-        ).when(pl.col('score') == -np.inf).then(
-            pl.lit(0)
-        ).otherwise(
-            pl.col('score')
+    explode_cols = [
+        ['protein_p1', 'cl_pos_p1', 'start_pos_p1'],
+        ['protein_p2', 'cl_pos_p2', 'start_pos_p2']
+    ]
+    df_l = df_l.with_columns(
+        _tmp_join=pl.int_range(pl.len()),  # Id range to reverse the explode
+    )
+
+    for i in [1, 2]:
+        # Note: For a single ambiguous CSM the cl_pos_p1/2 is unique for protein+link_pos,
+        #       meaning that start_pos_p1/2 determines in-column order (after protein ID)
+        df_l = df_l.explode(
+            explode_cols[i-1]
+        ).sort(explode_cols[i-1]).unique(
+            subset=['_tmp_join', *explode_cols[i-1]],
+            maintain_order=True
+        ).group_by(
+            '_tmp_join',
+            maintain_order=True
+        ).agg(
+            pl.col(explode_cols[i-1]),
+            pl.selectors.exclude(explode_cols[i-1]).first(),
+        ).with_columns(
+            pl.col(f'protein_p{i}').list.sort().list.unique(maintain_order=True).name.prefix('ppi_'),
         )
-    )
 
-    coverage_p1_prop = pl.col('coverage_p1') / (pl.col('coverage_p1') + pl.col('coverage_p2'))
-    coverage_p2_prop = pl.col('coverage_p2') / (pl.col('coverage_p1') + pl.col('coverage_p2'))
-    df = df.with_columns(
-        protein_score_p1 = pl.col('score') * coverage_p1_prop,
-        protein_score_p2 = pl.col('score') * coverage_p2_prop
-    )
-
-    # Swap peptides based on joined protein group
-    df = df.with_columns(
-        pl.col(['protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2']).name.prefix('_tmp_respair_swap_'),
-        _tmp_join = pl.int_range(pl.len()),
-    ).explode('_tmp_respair_swap_protein_p1', '_tmp_respair_swap_cl_pos_p1').unique(
-        subset=['_tmp_join', '_tmp_respair_swap_protein_p1', '_tmp_respair_swap_cl_pos_p1']
-    ).group_by('_tmp_join').agg(
-        pl.col(['_tmp_respair_swap_protein_p1', '_tmp_respair_swap_cl_pos_p1']).drop_nulls(),
-        pl.exclude(['_tmp_respair_swap_protein_p1', '_tmp_respair_swap_cl_pos_p1']).first()
-    ).explode('_tmp_respair_swap_protein_p2', '_tmp_respair_swap_cl_pos_p2').unique(
-        subset=['_tmp_join', '_tmp_respair_swap_protein_p2', '_tmp_respair_swap_cl_pos_p2']
-    ).group_by('_tmp_join').agg(
-        pl.col(['_tmp_respair_swap_protein_p2', '_tmp_respair_swap_cl_pos_p2']).drop_nulls(),
-        pl.exclude(['_tmp_respair_swap_protein_p2', '_tmp_respair_swap_cl_pos_p2']).first()
-    ).drop('_tmp_join')
-
-    df = df.with_columns(
-        pl.col(['protein_p1', 'protein_p2']).list.unique().list.sort().name.prefix('_tmp_ppi_swap_'),
-    )
+    df_l = df_l.drop('_tmp_join')
 
     swap_cmp_cols = [
         (f"{c}_p1", f"{c}_p2")
         for c in [
-            '_tmp_ppi_swap_protein',
-            '_tmp_respair_swap_protein',
-            '_tmp_respair_swap_cl_pos',
-            'protein',
+            'ppi_protein',
             'cl_pos',
+            'protein',
             'link_pos',
             'sequence',
         ]
@@ -198,34 +163,40 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
     swap_cond = swap_cond.otherwise(pl.lit(False))
 
     # Swap peptide specific columns
-    pair_cols1 = ['sequence_p1', 'protein_p1', 'start_pos_p1', 'link_pos_p1', 'cl_pos_p1', 'coverage_p1', 'decoy_p1']
-    pair_cols2 = ['sequence_p2', 'protein_p2', 'start_pos_p2', 'link_pos_p2', 'cl_pos_p2', 'coverage_p2', 'decoy_p2']
+    pair_cols1 = ['sequence_p1', 'ppi_protein_p1', 'protein_p1', 'start_pos_p1', 'link_pos_p1', 'cl_pos_p1', 'coverage_p1', 'decoy_p1']
+    pair_cols2 = ['sequence_p2', 'ppi_protein_p2', 'protein_p2', 'start_pos_p2', 'link_pos_p2', 'cl_pos_p2', 'coverage_p2', 'decoy_p2']
 
-    df = df.with_columns(
+    df_l = df_l.with_columns(
         group_swapped = swap_cond
     )
 
     for c1, c2 in zip(pair_cols1, pair_cols2):
-        df = df.with_columns(
+        df_l = df_l.with_columns(
             pl.when('group_swapped').then(pl.col(c2)).otherwise(pl.col(c1)).alias(c1),
             pl.when('group_swapped').then(pl.col(c1)).otherwise(pl.col(c2)).alias(c2),
         )
-    
-    df = df.drop(
-        pl.selectors.matches('^_tmp_respair_swap_'),
-        pl.selectors.matches('^_tmp_ppi_swap_protein_'),
+
+    # Fill in infinite scores
+    nat_score = pl.col('score').cast(pl.Float64).clip(pl.Float64.min(), pl.Float64.max())
+    max_score = nat_score.max()+pl.zeros(pl.len())
+    min_score = nat_score.min()+pl.zeros(pl.len())
+    inf_margin = (max_score-min_score)*pl.lit(0.1)
+    df_l = df_l.with_columns(pl.col('score') - min_score + inf_margin)
+    df_l = df_l.with_columns(
+        score=pl.when(pl.col('score') == np.inf).then(
+            max_score + 2*inf_margin
+        ).when(pl.col('score') == -np.inf).then(
+            pl.lit(0)
+        ).otherwise(
+            pl.col('score')
+        )
     )
 
-    # Calculate one-hot encoded target/decoy labels
-    df = df.with_columns(
-        TT=(pl.col('decoy_class')=='TT'),
-        TD=(pl.col('decoy_class')=='TD'),
-        DD=(pl.col('decoy_class')=='DD'),
+    coverage_p1_prop = pl.col('coverage_p1') / (pl.col('coverage_p1') + pl.col('coverage_p2'))
+    coverage_p2_prop = pl.col('coverage_p2') / (pl.col('coverage_p1') + pl.col('coverage_p2'))
+    df_l = df_l.with_columns(
+        protein_score_p1 = pl.col('score') * coverage_p1_prop,
+        protein_score_p2 = pl.col('score') * coverage_p2_prop
     )
 
-    df = df.with_columns(
-        pl.col(list_cols_1).replace([], None),
-        pl.col(list_cols_2).replace([], None),
-    )
-
-    return df
+    return df_l.collect()

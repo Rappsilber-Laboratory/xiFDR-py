@@ -12,11 +12,18 @@ logger = logging.getLogger(__name__)
 
 csm_cols = [
     'decoy_p1', 'decoy_p2', 'sequence_p1', 'sequence_p2',
-    'protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2', 'charge'
+    'protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2',
+    'ppi_protein_p1', 'ppi_protein_p2', 'charge'
 ]
-pep_cols = ['decoy_p1', 'decoy_p2', 'sequence_p1', 'sequence_p2', 'protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2']
-link_cols = ['decoy_p1', 'decoy_p2', 'protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2']
-ppi_cols = ['decoy_p1', 'decoy_p2', 'protein_p1', 'protein_p2']
+pep_cols = [
+    'decoy_p1', 'decoy_p2', 'sequence_p1', 'sequence_p2', 'protein_p1', 'protein_p2',
+    'cl_pos_p1', 'cl_pos_p2', 'ppi_protein_p1', 'ppi_protein_p2',
+]
+link_cols = [
+    'decoy_p1', 'decoy_p2', 'protein_p1', 'protein_p2', 'cl_pos_p1', 'cl_pos_p2',
+    'ppi_protein_p1', 'ppi_protein_p2',
+]
+ppi_cols = ['decoy_p1', 'decoy_p2', 'ppi_protein_p1', 'ppi_protein_p2',]
 fdr_groups_csm_pep = ['self', 'between', 'linear']  # FDR groups for CSM and peptide level
 fdr_groups_link_ppi = ['self', 'between']  # FDR groups for link and PPI level
 
@@ -175,6 +182,11 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
         df_pep = df_pep.filter('pass_threshold')
         df_csm = df_csm.filter('pass_threshold')
 
+    df_ppi = df_ppi.with_columns(
+        protein_p1='ppi_protein_p1',
+        protein_p2='ppi_protein_p2'
+    )
+
     return {
         'csm': df_csm,
         'pep': df_pep,
@@ -193,7 +205,7 @@ def _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio):
     logger.debug('Calculate CSM FDR and cutoff')
     df_csm = df_csm.with_columns(
         csm_fdr = single_grouped_fdr(df_csm)
-    ).filter(pl.col('csm_fdr') <= csm_fdr)
+    ).filter(pl.col('csm_fdr').clip(0.0, 1.0) <= csm_fdr)
 
     for fdr_group in fdr_groups_csm_pep:
         passed_group = df_csm.filter(pl.col('fdr_group') == fdr_group)
@@ -228,7 +240,7 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ra
     )
     df_pep = df_pep.with_columns(
         pep_fdr = single_grouped_fdr(df_pep)
-    ).filter(pl.col('pep_fdr') <= pep_fdr)
+    ).filter(pl.col('pep_fdr').clip(0.0, 1.0) <= pep_fdr)
 
     for fdr_group in fdr_groups_csm_pep:
         passed_group = df_pep.filter(pl.col('fdr_group') == fdr_group)
@@ -302,7 +314,7 @@ def _prot_fdr(df_pep:pl.DataFrame,
     df_prot = df_prot.with_columns(
         prot_fdr=single_grouped_fdr(df_prot, fdr_group_col='protein_fdr_group')
     )
-    df_prot = df_prot.filter(pl.col('prot_fdr') <= prot_fdr)
+    df_prot = df_prot.filter(pl.col('prot_fdr').clip(0.0, 1.0) <= prot_fdr)
     # Check whether there are at least enough TT to have approx. `min_td` TD matches under the requested FDR level.
     fdr_groups = ['unsupported_between', 'supported_between', 'self_or_linear']
     valid_groups = []
@@ -317,7 +329,7 @@ def _prot_fdr(df_pep:pl.DataFrame,
         invalid_df = pl.concat(invalid_groups).with_columns(
             protein_fdr_group=pl.lit('invalid_merged')
         )
-        invalid_df = invalid_df.filter(pl.col('prot_fdr') <= prot_fdr)
+        invalid_df = invalid_df.filter(pl.col('prot_fdr').clip(0.0, 1.0) <= prot_fdr)
         if len(invalid_df.filter(pl.col('TT')))*prot_fdr >= td_prot_prob:
             valid_groups.append(invalid_df)
     if len(valid_groups) == 0:
@@ -392,7 +404,7 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_
     )
     df_link = df_link.with_columns(
         link_fdr = single_grouped_fdr(df_link)
-    ).filter(pl.col('link_fdr') <= link_fdr)
+    ).filter(pl.col('link_fdr').clip(0.0, 1.0) <= link_fdr)
 
     for fdr_group in fdr_groups_link_ppi:
         passed_group = df_link.filter(pl.col('fdr_group') == fdr_group)
@@ -425,7 +437,7 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_r
     )
     df_ppi = df_ppi.with_columns(
         ppi_fdr = single_grouped_fdr(df_ppi)
-    ).filter(pl.col('ppi_fdr') <= ppi_fdr)
+    ).filter(pl.col('ppi_fdr').clip(0.0, 1.0) <= ppi_fdr)
 
     for fdr_group in fdr_groups_link_ppi:
         passed_group = df_ppi.filter(pl.col('fdr_group') == fdr_group)
