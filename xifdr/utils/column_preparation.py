@@ -53,7 +53,7 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
         )
 
     # Generate fdr_group if not present
-    if 'fdr_group' not in df_l.columns:
+    if 'fdr_group' not in df.columns:
         df_l = df_l.with_columns(
             fdr_group=(
                 (pl.col('protein_p1').list.eval(pl.element().str.replace(decoy_adjunct, '')).list.set_intersection(
@@ -72,7 +72,7 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
         )
 
     # Create decoy_class column if not present
-    if 'decoy_class' not in df_l.columns:
+    if 'decoy_class' not in df.columns:
         df_l = df_l.with_columns(
             decoy_class=pl.when(
                 pl.col('decoy_p1') & pl.col('decoy_p2')
@@ -95,7 +95,7 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
     )
 
     # Put in dummy coverage if none provided
-    if 'coverage_p1' not in df_l.columns or 'coverage_p2' not in df_l.columns:
+    if 'coverage_p1' not in df.columns or 'coverage_p2' not in df.columns:
         df_l = df_l.with_columns(
             coverage_p1 = pl.lit(0.5),
             coverage_p2 = pl.lit(0.5),
