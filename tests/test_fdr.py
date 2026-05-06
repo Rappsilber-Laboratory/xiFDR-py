@@ -141,12 +141,20 @@ def test_full_fdr():
         pep_fdr=0.5,
         prot_fdr=0.3,
         link_fdr=0.05,
-        ppi_fdr=0.05
+        ppi_fdr=0.05,
+        filter_back=False
     )
     assert 'csm' in x
     assert 'pep' in x
     assert 'link' in x
     assert 'ppi' in x
+
+    # Check for _right columns and nulls in results
+    for name, df in x.items():
+        right_cols = [c for c in df.columns if c.endswith('_right')]
+        assert not right_cols, f"Found _right columns in {name}: {right_cols}"
+        if 'score' in df.columns:
+            assert df['score'].null_count() == 0, f"Found null scores in {name} - check for join issues"
 
 
 def test_full_fdr_consistency():
