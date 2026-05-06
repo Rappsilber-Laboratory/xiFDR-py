@@ -155,6 +155,7 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
         df_ppi.select(*ppi_cols, *pass_on_cols),
         on=ppi_cols,
         how='full',
+        coalesce=True,
     ).with_columns(
         pass_threshold=pl.col('pass_threshold').fill_null(pl.lit(False))
     )
@@ -164,6 +165,7 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
         df_link.select(*link_cols, *pass_on_cols),
         on=link_cols,
         how='full',
+        coalesce=True,
     ).with_columns(
         pass_threshold=pl.col('pass_threshold').fill_null(pl.lit(False))
     )
@@ -173,6 +175,7 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
         df_pep.select(*pep_cols, *pass_on_cols),
         on=pep_cols,
         how='full',
+        coalesce=True,
     ).with_columns(
         pass_threshold=pl.col('pass_threshold').fill_null(pl.lit(False))
     )
