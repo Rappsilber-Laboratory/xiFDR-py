@@ -304,9 +304,7 @@ def _prot_fdr(df_pep:pl.DataFrame,
         protein_fdr_group=(
             pl.when(pl.col('between') & pl.col('no_self') & pl.col('no_linear'))
             .then(pl.lit('unsupported_between'))
-            .when(pl.col('between'))
-            .then(pl.lit('supported_between'))
-            .otherwise(pl.lit('self_or_linear'))
+            .otherwise(pl.lit('self_linear_supported'))
         )
     )
     df_prot = df_prot.with_columns(
@@ -319,26 +317,19 @@ def _prot_fdr(df_pep:pl.DataFrame,
     )
     df_prot = df_prot.filter(pl.col('prot_fdr').clip(0.0, 1.0) <= prot_fdr)
     # Check whether there are at least enough TT to have approx. `min_td` TD matches under the requested FDR level.
-    fdr_groups = ['unsupported_between', 'supported_between', 'self_or_linear']
+    fdr_groups = ['unsupported_between', 'self_linear_supported']
     valid_groups = []
     invalid_groups = []
+
     for g in fdr_groups:
         df_g = df_prot.filter(pl.col('protein_fdr_group') == g)
         if len(df_g.filter(pl.col('TT')))*prot_fdr >= td_prot_prob:
             valid_groups.append(df_g)
         else:
+            warnings.warn(f'Insufficient TT for protein FDR group {g}.')
             invalid_groups.append(df_g)
-    if len(invalid_groups) > 1:
-        invalid_df = pl.concat(invalid_groups).with_columns(
-            protein_fdr_group=pl.lit('invalid_merged')
-        )
-        invalid_df = invalid_df.filter(pl.col('prot_fdr').clip(0.0, 1.0) <= prot_fdr)
-        if len(invalid_df.filter(pl.col('TT')))*prot_fdr >= td_prot_prob:
-            valid_groups.append(invalid_df)
-    if len(valid_groups) == 0:
-        warnings.warn('Insufficient TT for protein FDR.')
-        return invalid_groups[0][:0]  # Return empty DF
-    df_prot = pl.concat(valid_groups)
+    # Concat valid groups with dummy DF for schema information when no groups are valid
+    df_prot = pl.concat([df_prot.head(0)] + valid_groups)
     return df_prot
 
 
