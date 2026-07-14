@@ -177,18 +177,18 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
         )
 
     # Fill in infinite scores
-    nat_score = pl.col('score').cast(pl.Float64).clip(pl.Float64.min(), pl.Float64.max())
-    max_score = nat_score.max()+pl.zeros(pl.len())
-    min_score = nat_score.min()+pl.zeros(pl.len())
+    nat_score = pl.col('score').filter(pl.col('score').is_finite())
+    max_score = nat_score.max()
+    min_score = nat_score.min()
     inf_margin = (max_score-min_score)*pl.lit(0.1)
-    df_l = df_l.with_columns(pl.col('score') - min_score + inf_margin)
+    
     df_l = df_l.with_columns(
         score=pl.when(pl.col('score') == np.inf).then(
-            max_score + 2*inf_margin
+            max_score - min_score + 2*inf_margin
         ).when(pl.col('score') == -np.inf).then(
-            pl.lit(0)
+            pl.lit(0.0)
         ).otherwise(
-            pl.col('score')
+            pl.col('score') - min_score + inf_margin
         )
     )
 
