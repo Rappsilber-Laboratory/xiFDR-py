@@ -31,9 +31,11 @@ def test_column_prep():
 
     df_expect = pl.DataFrame({
         "protein_p1": [['A'], ['A', 'E'], ['A', 'B', 'B']],
+        "ppi_protein_p1": [['A'], ['A', 'E'], ['A', 'B']],
         "start_pos_p1": [[1], [1, 2], [1, 2, 3]],
-        "protein_p2": [['C'], ['E', 'E', 'E'], ['F', 'X']],
-        "start_pos_p2": [[1], [1, 1, 2], [2, 1]],
+        "protein_p2": [['C'], ['E', 'E'], ['F', 'X']],
+        "ppi_protein_p2": [['C'], ['E'], ['F', 'X']],
+        "start_pos_p2": [[1], [1, 2], [2, 1]],
         "link_pos_p1": [7, 2, 3],
         "link_pos_p2": [1, 8, 9],
         "sequence_p1": ['ABC', 'DEF', 'GHI'],
@@ -44,7 +46,7 @@ def test_column_prep():
         "fdr_group": ['between', 'self', 'between'],
         "decoy_class": ['TT', 'TD', 'DD'],
         "cl_pos_p1": [[7], [2, 3], [3, 4, 5]],
-        "cl_pos_p2": [[1], [8, 8, 9], [10, 9]],
+        "cl_pos_p2": [[1], [8, 9], [10, 9]],
         "TT": [True, False, False],
         "TD": [False, True, False],
         "DD": [False, False, True],

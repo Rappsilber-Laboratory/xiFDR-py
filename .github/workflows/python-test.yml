@@ -23,7 +23,21 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libopenblas-dev pkg-config gfortran wget lsb-release
+        wget https://apache.jfrog.io/artifactory/arrow/$(lsb_release --id --short | tr 'A-Z' 'a-z')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
+        sudo apt-get install -y -V ./apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb
+        sudo apt-get update
+        sudo apt-get install -y -V libarrow-dev libparquet-dev libarrow-dataset-dev libarrow-acero-dev libarrow-flight-dev libarrow-flight-sql-dev
     - name: Install dependencies
+      env:
+        PYARROW_WITH_CUDA: 0
+        PYARROW_WITH_GANDIVA: 0
+        PYARROW_WITH_ORC: 0
+        PYARROW_WITH_S3: 0
+        PYARROW_WITH_GCS: 0
       run: |
         python -m pip install --upgrade pip
         python -m pip install pytest

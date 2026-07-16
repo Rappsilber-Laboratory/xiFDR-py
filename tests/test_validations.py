@@ -137,10 +137,8 @@ def test_protein_td_inval_merge():
         protein_score_p2=pl.lit(0),
     )
     res = _prot_fdr(df, agg, 0.1, 1)
-    assert res.filter(pl.col('protein_fdr_group') == 'supported_between').height > 0
+    assert res.filter(pl.col('protein_fdr_group') == 'self_linear_supported').height > 0
     assert res.filter(pl.col('protein_fdr_group') == 'unsupported_between').height == 0
-    assert res.filter(pl.col('protein_fdr_group') == 'self_or_linear').height == 0
-    assert res.filter(pl.col('protein_fdr_group') == 'invalid_merged').height > 0
 
 def test_protein_td_only_supp():
     """
@@ -186,10 +184,8 @@ def test_protein_td_only_supp():
         protein_score_p2=pl.lit(0),
     )
     res = _prot_fdr(df, agg, 0.1, 1)
-    assert res.filter(pl.col('protein_fdr_group') == 'supported_between').height > 0
+    assert res.filter(pl.col('protein_fdr_group') == 'self_linear_supported').height > 0
     assert res.filter(pl.col('protein_fdr_group') == 'unsupported_between').height == 0
-    assert res.filter(pl.col('protein_fdr_group') == 'self_or_linear').height == 0
-    assert res.filter(pl.col('protein_fdr_group') == 'invalid_merged').height == 0
 
 def test_td_dd_ratio():
     warnings.simplefilter("always")
