@@ -23,6 +23,10 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libopenblas-dev pkg-config gfortran
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
