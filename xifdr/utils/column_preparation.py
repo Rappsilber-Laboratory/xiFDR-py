@@ -52,8 +52,42 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
             pl.col(c).fill_null(pl.lit([])),
         )
 
+    # Generate base sequece columns if not present
+    if 'base_sequence_p1' not in df.columns or 'base_sequence_p2' not in df.columns:
+        # Remove all text in brackets/braces and all non-capital-letter symbols
+        df_l = df_l.with_columns(
+            base_sequence_p1 = pl.col('sequence_p1').str.replace_all(
+                r'\[[^\]]*\]', ''
+            ).str.replace_all(
+                r'\([^\)]*\)', ''
+            ).str.replace_all(
+                r'\{[^\}]*\}', ''
+            ).str.replace_all(
+                r'[^A-Z]', ''
+            ),
+            base_sequence_p2 = pl.col('sequence_p2').str.replace_all(
+                r'\[[^\]]*\]', ''
+            ).str.replace_all(
+                r'\([^\)]*\)', ''
+            ).str.replace_all(
+                r'\{[^\}]*\}', ''
+            ).str.replace_all(
+                r'[^A-Z]', ''
+            ),
+        )
+
     # Generate fdr_group if not present
     if 'fdr_group' not in df.columns:
+        start_p1_in_p2 = (
+            (pl.col('start_pos_p1').list.max() >= pl.col('start_pos_p2').list.min()) &
+            (pl.col('start_pos_p1').list.min() < (pl.col('start_pos_p2').list.max() + pl.col('base_sequence_p2').str.len_chars()))
+        )
+        start_p2_in_p1 = (
+            (pl.col('start_pos_p2').list.max() >= pl.col('start_pos_p1').list.min()) &
+            (pl.col('start_pos_p2').list.min() < (pl.col('start_pos_p1').list.max() + pl.col('base_sequence_p1').str.len_chars()))
+        )
+        overlapping_expr = pl.col('fdr_group') == 'self'
+        overlapping_expr &= start_p1_in_p2 | start_p2_in_p1
         df_l = df_l.with_columns(
             fdr_group=(
                 (pl.col('protein_p1').list.eval(pl.element().str.replace(decoy_adjunct, '')).list.set_intersection(
@@ -62,10 +96,12 @@ def prepare_columns(df, decoy_adjunct:str = 'REV_'):
                     ['true', 'false'],
                     ['between', 'self']
                 )
-            )
+            ),
         ).with_columns(
             fdr_group=pl.when(pl.col('protein_p2').eq([]) | pl.col('protein_p2').is_null()).then(
                 pl.lit('linear')
+            ).when(overlapping_expr).then(
+                pl.lit('overlapping')
             ).otherwise(
                 pl.col('fdr_group')
             )

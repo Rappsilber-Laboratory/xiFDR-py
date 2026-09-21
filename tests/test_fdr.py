@@ -1,3 +1,4 @@
+from xifdr.fdr import single_grouped_fdr
 import logging
 import numpy as np
 import polars as pl
@@ -296,3 +297,38 @@ def test_column_boost():
     )
     print(cutoffs)
     pass
+
+def test_unpaired_fdr():
+    self_tt = ([True] * 9) + [False] + ([True] * 90)
+    self_td = [not x for x in self_tt]
+    self_dd = [False] * 100
+    between_tt = ([True] * 40)  + ([False] * 60)
+    between_td = ([False] * 40) + [not not x % 3 for x in range(1, 61)]
+    between_dd = ([False] * 40) + [not x % 3 for x in range(1, 61)]
+    overlapping_tt = ([True] * 99) + [False]
+    overlapping_td = [False] * 100
+    overlapping_dd = [not x for x in overlapping_tt]
+
+    df = pl.DataFrame(
+        {
+            'fdr_group': ['self'] * 100 + ['between'] * 100 + ['overlapping'] * 100,
+            'TT': self_tt + between_tt + overlapping_tt,
+            'TD': self_td + between_td + overlapping_td,
+            'DD': self_dd + between_dd + overlapping_dd,
+            'score': np.linspace(100, 0, num=300)
+        }
+    )
+
+    df = df.with_columns(
+        single_grouped_fdr(
+            df,
+            unpaired_groups=['overlapping']
+        )
+    )
+
+    assert df.filter(pl.col('fdr_group')=='self')['fdr'].min() == 0.0
+    assert df.filter(pl.col('fdr_group')=='self')['fdr'].max() == pytest.approx(0.01, abs=1e-2)
+    assert df.filter(pl.col('fdr_group')=='between')['fdr'].min() == 0.0
+    assert df.filter(pl.col('fdr_group')=='between')['fdr'].max() == pytest.approx(0.50, abs=1e-2)
+    assert df.filter(pl.col('fdr_group')=='overlapping')['fdr'].min() == 0.0
+    assert df.filter(pl.col('fdr_group')=='overlapping')['fdr'].max() == pytest.approx(0.01, abs=1e-2)

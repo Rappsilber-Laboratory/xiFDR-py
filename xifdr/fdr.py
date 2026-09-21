@@ -210,21 +210,32 @@ def _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio):
         csm_fdr = single_grouped_fdr(df_csm)
     ).filter(pl.col('csm_fdr').clip(0.0, 1.0) <= csm_fdr)
 
-    for fdr_group in fdr_groups_csm_pep:
-        passed_group = df_csm.filter(pl.col('fdr_group') == fdr_group)
-        if passed_group.is_empty():
-            continue
+    df_csm_checks = df_csm.group_by('fdr_group').agg(
+        pl.col('TD').sum().alias('n_td'),
+        pl.col('DD').sum().alias('n_dd'),
+        pl.col('TT').sum().alias('n_tt'),
+        pl.all(),
+    ).with_columns(
+        csm_td_check = pl.col('n_tt') * csm_fdr >= td_prob,
+        csm_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
+    )
 
-        n_tt = passed_group.filter(pl.col('TT')).height
-        n_td = passed_group.filter(pl.col('TD')).height
-        n_dd = passed_group.filter(pl.col('DD')).height
-
-        if n_tt * csm_fdr < td_prob:
+    for row in df_csm_checks.to_dicts():
+        fdr_group = row['fdr_group']
+        td_check = row['csm_td_check']
+        dd_check = row['csm_dd_check']
+        if not td_check:
             warnings.warn(f'Insufficient TT for CSM FDR in group {fdr_group}.')
-            df_csm = df_csm.filter(pl.col('fdr_group') != fdr_group)
-        if n_dd * td_dd_ratio > n_td:
-            warnings.warn(f'More DD than TD for CSM FDR in group {fdr_group}.')
-            df_csm = df_csm.filter(pl.col('fdr_group') != fdr_group)
+        if not dd_check:
+            warnings.warn(f'More DD than TT for CSM FDR in group {fdr_group}.')
+
+    df_csm = df_csm_checks.explode(
+        pl.selectors.list()
+    ).select(
+        *df_csm.columns,
+        'csm_td_check',
+        'csm_dd_check',
+    )
 
     return df_csm
 
@@ -245,21 +256,32 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ra
         pep_fdr = single_grouped_fdr(df_pep)
     ).filter(pl.col('pep_fdr').clip(0.0, 1.0) <= pep_fdr)
 
-    for fdr_group in fdr_groups_csm_pep:
-        passed_group = df_pep.filter(pl.col('fdr_group') == fdr_group)
-        if passed_group.is_empty():
-            continue
+    df_pep_checks = df_pep.group_by('fdr_group').agg(
+        pl.col('TD').sum().alias('n_td'),
+        pl.col('DD').sum().alias('n_dd'),
+        pl.col('TT').sum().alias('n_tt'),
+        pl.all(),
+    ).with_columns(
+        pep_td_check = pl.col('n_tt') * pep_fdr >= td_prob,
+        pep_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
+    )
 
-        n_tt = passed_group.filter(pl.col('TT')).height
-        n_td = passed_group.filter(pl.col('TD')).height
-        n_dd = passed_group.filter(pl.col('DD')).height
-
-        if n_tt * pep_fdr < td_prob:
+    for row in df_pep_checks.to_dicts():
+        fdr_group = row['fdr_group']
+        td_check = row['pep_td_check']
+        dd_check = row['pep_dd_check']
+        if not td_check:
             warnings.warn(f'Insufficient TT for peptide FDR in group {fdr_group}.')
-            df_pep = df_pep.filter(pl.col('fdr_group') != fdr_group)
-        if n_dd * td_dd_ratio > n_td:
-            warnings.warn(f'More DD than TD for peptide FDR in group {fdr_group}.')
-            df_pep = df_pep.filter(pl.col('fdr_group') != fdr_group)
+        if not dd_check:
+            warnings.warn(f'More DD than TT for peptide FDR in group {fdr_group}.')
+
+    df_pep = df_pep_checks.explode(
+        pl.selectors.list()
+    ).select(
+        *df_pep.columns,
+        'pep_td_check',
+        'pep_dd_check',
+    )
 
     return df_pep
 
@@ -316,20 +338,22 @@ def _prot_fdr(df_pep:pl.DataFrame,
         prot_fdr=single_grouped_fdr(df_prot, fdr_group_col='protein_fdr_group')
     )
     df_prot = df_prot.filter(pl.col('prot_fdr').clip(0.0, 1.0) <= prot_fdr)
-    # Check whether there are at least enough TT to have approx. `min_td` TD matches under the requested FDR level.
-    fdr_groups = ['unsupported_between', 'self_linear_supported']
-    valid_groups = []
-    invalid_groups = []
 
-    for g in fdr_groups:
-        df_g = df_prot.filter(pl.col('protein_fdr_group') == g)
-        if len(df_g.filter(pl.col('TT')))*prot_fdr >= td_prot_prob:
-            valid_groups.append(df_g)
-        else:
-            warnings.warn(f'Insufficient TT for protein FDR group {g}.')
-            invalid_groups.append(df_g)
-    # Concat valid groups with dummy DF for schema information when no groups are valid
-    df_prot = pl.concat([df_prot.head(0)] + valid_groups)
+    # Check whether there are at least enough TT to have approx. `min_td` TD matches under the requested FDR level.
+    df_prot_checks = df_prot.group_by('protein_fdr_group').agg(
+        pl.col('TT').sum().alias('n_t'),
+        pl.all(),
+    ).with_columns(
+        prot_td_check = pl.col('n_t') * prot_fdr >= td_prot_prob,
+    )
+
+    df_prot = df_prot_checks.explode(
+        pl.selectors.list()
+    ).select(
+        *df_prot.columns,
+        'prot_td_check',
+    )
+
     return df_prot
 
 
@@ -400,21 +424,32 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_
         link_fdr = single_grouped_fdr(df_link)
     ).filter(pl.col('link_fdr').clip(0.0, 1.0) <= link_fdr)
 
-    for fdr_group in fdr_groups_link_ppi:
-        passed_group = df_link.filter(pl.col('fdr_group') == fdr_group)
-        if passed_group.is_empty():
-            continue
+    df_link_checks = df_link.group_by('fdr_group').agg(
+        pl.col('TD').sum().alias('n_td'),
+        pl.col('DD').sum().alias('n_dd'),
+        pl.col('TT').sum().alias('n_tt'),
+        pl.all(),
+    ).with_columns(
+        link_td_check = pl.col('n_tt') * link_fdr >= td_prob,
+        link_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
+    )
 
-        n_tt = passed_group.filter(pl.col('TT')).height
-        n_td = passed_group.filter(pl.col('TD')).height
-        n_dd = passed_group.filter(pl.col('DD')).height
-
-        if n_tt * link_fdr < td_prob:
+    for row in df_link_checks.to_dicts():
+        fdr_group = row['fdr_group']
+        td_check = row['link_td_check']
+        dd_check = row['link_dd_check']
+        if not td_check:
             warnings.warn(f'Insufficient TT for link FDR in group {fdr_group}.')
-            df_link = df_link.filter(pl.col('fdr_group') != fdr_group)
-        if n_dd * td_dd_ratio > n_td:
-            warnings.warn(f'More DD than TD for link FDR in group {fdr_group}.')
-            df_link = df_link.filter(pl.col('fdr_group') != fdr_group)
+        if not dd_check:
+            warnings.warn(f'More DD than TT for link FDR in group {fdr_group}.')
+
+    df_link = df_link_checks.explode(
+        pl.selectors.list()
+    ).select(
+        *df_link.columns,
+        'link_td_check',
+        'link_dd_check',
+    )
 
     return df_link
 
@@ -433,26 +468,39 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_r
         ppi_fdr = single_grouped_fdr(df_ppi)
     ).filter(pl.col('ppi_fdr').clip(0.0, 1.0) <= ppi_fdr)
 
-    for fdr_group in fdr_groups_link_ppi:
-        passed_group = df_ppi.filter(pl.col('fdr_group') == fdr_group)
-        if passed_group.is_empty():
-            continue
+    df_ppi_checks = df_ppi.group_by('fdr_group').agg(
+        pl.col('TD').sum().alias('n_td'),
+        pl.col('DD').sum().alias('n_dd'),
+        pl.col('TT').sum().alias('n_tt'),
+        pl.all(),
+    ).with_columns(
+        ppi_td_check = pl.col('n_tt') * ppi_fdr >= td_prob,
+        ppi_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
+    )
 
-        n_tt = passed_group.filter(pl.col('TT')).height
-        n_td = passed_group.filter(pl.col('TD')).height
-        n_dd = passed_group.filter(pl.col('DD')).height
-
-        if n_tt * ppi_fdr < td_prob:
+    for row in df_ppi_checks.to_dicts():
+        fdr_group = row['fdr_group']
+        td_check = row['ppi_td_check']
+        dd_check = row['ppi_dd_check']
+        if not td_check:
             warnings.warn(f'Insufficient TT for PPI FDR in group {fdr_group}.')
-            df_ppi = df_ppi.filter(pl.col('fdr_group') != fdr_group)
-        if n_dd * td_dd_ratio > n_td:
-            warnings.warn(f'More DD than TD for PPI FDR in group {fdr_group}.')
-            df_ppi = df_ppi.filter(pl.col('fdr_group') != fdr_group)
+        if not dd_check:
+            warnings.warn(f'More DD than TT for PPI FDR in group {fdr_group}.')
+
+    df_ppi = df_ppi_checks.explode(
+        pl.selectors.list()
+    ).select(
+        *df_ppi.columns,
+        'ppi_td_check',
+        'ppi_dd_check',
+    )
 
     return df_ppi
 
 
-def single_grouped_fdr(df: Union[pl.DataFrame, pd.DataFrame], fdr_group_col: str = "fdr_group") -> pl.Series:
+def single_grouped_fdr(df: Union[pl.DataFrame, pd.DataFrame],
+                       fdr_group_col: str = "fdr_group",
+                       unpaired_groups: list[str] = None) -> pl.Series:
     """
     Computes the false discovery rate (FDR) for a given DF.
 
@@ -487,6 +535,12 @@ def single_grouped_fdr(df: Union[pl.DataFrame, pd.DataFrame], fdr_group_col: str
         class_df = df.filter(
             pl.col(fdr_group_col) == fdr_group
         )
+        if unpaired_groups and fdr_group in unpaired_groups:
+            # Unpaird groups don't have proper TD matched
+            class_df = class_df.with_columns(
+                TD = 'DD',
+                DD = pl.lit(False)
+            )
         class_df = class_df.with_columns(
             single_fdr(class_df)
         )
