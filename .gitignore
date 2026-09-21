@@ -10,3 +10,6 @@ __pycache__
 .pytest_cache
 /.vscode/settings.json
 debug_*.py
+/venv*
+/scratch
+.vscode

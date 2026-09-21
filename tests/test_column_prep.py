@@ -4,17 +4,17 @@ from xifdr.utils.column_preparation import prepare_columns
 
 def test_column_prep():
     df = pl.DataFrame([
-        [['C'], ['E', 'A'], ['A', 'B', 'B']],  # protein_p1
-        [[1],   [2,   1],   [1,   3,   2]],    # start_p1
-        [['A'], ['E', 'E', 'E'], ['F', 'X']],  # protein_p2
-        [[1],   [2,   1,   1],   [2, 1]],      # start_p2
-        [1, 2, 3],  # link_pos_p1
-        [7, 8, 9],  # link_pos_p2
-        ['ABC', 'DEF', 'GHI'],  # sequence_p1
-        ['ABC', 'AAA', 'DEF'],  # sequence_p2
-        [False, False, True],  # decoy_p1
-        [False, True, True],  # decoy_p2
-        [-1, 0, 1],  # score
+        [['C'], ['E', 'A'], ['A', 'B', 'B'], ['A']],  # protein_p1
+        [[1],   [2,   1],   [1,   3,   2], [1]],    # start_p1
+        [['A'], ['E', 'E', 'E'], ['F', 'X'], ['A']],  # protein_p2
+        [[1],   [2,   1,   1],   [2, 1], [10]],      # start_p2
+        [1, 2, 3, 1],  # link_pos_p1
+        [7, 8, 9, 1],  # link_pos_p2
+        ['ABC', 'D[MOD]EF', 'GmodHI', 'ABC'],  # sequence_p1
+        ['AB{MOD}C', 'AAA', 'D(MOD)EF', 'XYZ'],  # sequence_p2
+        [False, False, True, False],  # decoy_p1
+        [False, True, True, False],  # decoy_p2
+        [-1, 0, 1, -1],  # score
     ], schema=[
         "protein_p1",
         "start_pos_p1",
@@ -30,29 +30,33 @@ def test_column_prep():
     ])
 
     df_expect = pl.DataFrame({
-        "protein_p1": [['A'], ['A', 'E'], ['A', 'B', 'B']],
-        "start_pos_p1": [[1], [1, 2], [1, 2, 3]],
-        "protein_p2": [['C'], ['E', 'E', 'E'], ['F', 'X']],
-        "start_pos_p2": [[1], [1, 1, 2], [2, 1]],
-        "link_pos_p1": [7, 2, 3],
-        "link_pos_p2": [1, 8, 9],
-        "sequence_p1": ['ABC', 'DEF', 'GHI'],
-        "sequence_p2": ['ABC', 'AAA', 'DEF'],
-        "decoy_p1": [False, False, True],
-        "decoy_p2": [False, True, True],
-        "score": [0.2, 1.2, 2.2],
-        "fdr_group": ['between', 'self', 'between'],
-        "decoy_class": ['TT', 'TD', 'DD'],
-        "cl_pos_p1": [[7], [2, 3], [3, 4, 5]],
-        "cl_pos_p2": [[1], [8, 8, 9], [10, 9]],
-        "TT": [True, False, False],
-        "TD": [False, True, False],
-        "DD": [False, False, True],
-        "coverage_p1": [0.5, 0.5, 0.5],
-        "coverage_p2": [0.5, 0.5, 0.5],
-        "protein_score_p1": [0.1, 0.6, 1.1],
-        "protein_score_p2": [0.1, 0.6, 1.1],
-        "group_swapped": [True, False, False],
+        "protein_p1": [['A'], ['A', 'E'], ['A', 'B', 'B'], ['A']],
+        "ppi_protein_p1": [['A'], ['A', 'E'], ['A', 'B'], ['A']],
+        "start_pos_p1": [[1], [1, 2], [1, 2, 3], [1]],
+        "protein_p2": [['C'], ['E', 'E'], ['F', 'X'], ['A']],
+        "ppi_protein_p2": [['C'], ['E'], ['F', 'X'], ['A']],
+        "start_pos_p2": [[1], [1, 2], [2, 1], [10]],
+        "link_pos_p1": [7, 2, 3, 1],
+        "link_pos_p2": [1, 8, 9, 1],
+        "sequence_p1": ['AB{MOD}C', 'D[MOD]EF', 'GmodHI', 'ABC'],
+        "sequence_p2": ['ABC', 'AAA', 'D(MOD)EF', 'XYZ'],
+        "base_sequence_p1": ['ABC', 'DEF', 'GHI', 'ABC'],
+        "base_sequence_p2": ['ABC', 'AAA', 'DEF', 'XYZ'],
+        "decoy_p1": [False, False, True, False],
+        "decoy_p2": [False, True, True, False],
+        "score": [0.2, 1.2, 2.2, 0.2],
+        "fdr_group": ['between', 'overlapping', 'between', 'self'],
+        "decoy_class": ['TT', 'TD', 'DD', 'TT'],
+        "cl_pos_p1": [[7], [2, 3], [3, 4, 5], [1]],
+        "cl_pos_p2": [[1], [8, 9], [10, 9], [10]],
+        "TT": [True, False, False, True],
+        "TD": [False, True, False, False],
+        "DD": [False, False, True, False],
+        "coverage_p1": [0.5, 0.5, 0.5, 0.5],
+        "coverage_p2": [0.5, 0.5, 0.5, 0.5],
+        "protein_score_p1": [0.1, 0.6, 1.1, 0.1],
+        "protein_score_p2": [0.1, 0.6, 1.1, 0.1],
+        "group_swapped": [True, False, False, False],
     })
 
     df_res = prepare_columns(df)

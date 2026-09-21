@@ -224,7 +224,12 @@ def boost_manhattan(df: pl.DataFrame,
         n_jobs = max(max_mem_cpu, 1)
         n_jobs = min(n_jobs, os.cpu_count())
         logger.info(f"Using {n_jobs} CPUs based on available memory.")
-    if not is_gil_enabled():
+    use_threads = False
+    if hasattr(sys, '_is_gil_enabled'):
+        use_threads = not sys._is_gil_enabled()
+    else:
+        use_threads = getattr(sys.flags, 'nogil', False)
+    if not use_threads:
         logger.info(f"Using {n_jobs} threads (GIL disabled).")
         pool_obj = mp_dummy.Pool(n_jobs)
     elif n_jobs == 1:
