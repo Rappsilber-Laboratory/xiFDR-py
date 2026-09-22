@@ -48,3 +48,5 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 html_theme = "sphinx_rtd_theme"
 html_static_path = ['_static']
+
+# PRs should trigger rtd builds https://docs.readthedocs.com/platform/stable/guides/pull-requests.html
