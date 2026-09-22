@@ -332,3 +332,46 @@ def test_unpaired_fdr():
     assert df.filter(pl.col('fdr_group')=='between')['fdr'].max() == pytest.approx(0.50, abs=1e-2)
     assert df.filter(pl.col('fdr_group')=='overlapping')['fdr'].min() == 0.0
     assert df.filter(pl.col('fdr_group')=='overlapping')['fdr'].max() == pytest.approx(0.01, abs=1e-2)
+
+
+@pytest.mark.slow
+def test_group_boost():
+    from xifdr.boosting import group_boost
+    samples = pl.read_parquet(FIXTURE_PATH)
+    params = group_boost(
+        samples,
+        csm_fdr=(0, 0.2),
+        link_fdr=(0.05, 0.05),
+        ppi_fdr=(0.05, 0.05),
+        points=3,
+        n_jobs=3
+    )
+    assert 'self' in params
+    assert 'between' in params
+    assert isinstance(params['self'], list)
+    assert isinstance(params['between'], list)
+
+def test_group_full_fdr():
+    from xifdr.fdr import group_full_fdr
+    samples = pl.read_parquet(FIXTURE_PATH)
+    cutoffs_self = [0.1, 0.1, 0.1, 0.1, 0.1]
+    cutoffs_between = [0.1, 0.1, 0.1, 0.1, 0.1]
+    results = group_full_fdr(
+        samples,
+        cutoffs_self=cutoffs_self,
+        cutoffs_between=cutoffs_between,
+        filter_back=True
+    )
+    
+    assert 'csm' in results
+    assert 'pep' in results
+    assert 'prot' in results
+    
+    csm = results['csm']
+    assert 'self' in csm['fdr_group'].to_list() or 'between' in csm['fdr_group'].to_list()
+    
+    prot = results['prot']
+    assert 'score_self' in prot.columns
+    assert 'score_between' in prot.columns
+    assert 'prot_fdr_self' in prot.columns
+    assert 'prot_fdr_between' in prot.columns

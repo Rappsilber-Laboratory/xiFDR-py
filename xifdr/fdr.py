@@ -571,3 +571,106 @@ def single_fdr(df: Union[pl.DataFrame, pd.DataFrame]) -> pl.Series:
         fdr = fdr_raw.clip(lower_bound=0).reverse().cum_min().reverse()
     )
     return working_df.sort(order_col)['fdr']
+
+
+def group_full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
+                   cutoffs_self: list[float],
+                   cutoffs_between: list[float],
+                   boost_cols: list[str] = None,
+                   neg_boost_cols: list[str] = None,
+                   min_len: int = 5,
+                   decoy_adjunct: str = 'REV_',
+                   unique_csm: bool = True,
+                   filter_back: bool = True,
+                   prepare_column: bool = True,
+                   td_prob: int = 2,
+                   td_prot_prob: int = 10,
+                   td_dd_ratio: float = 1.0,
+                   custom_aggs: dict = None) -> dict[str, pl.DataFrame]:
+    """
+    Apply two sets of FDR cutoffs (e.g. from group_boost) for 'self' and 'between' matches and merge.
+    """
+    if boost_cols is None:
+        boost_cols = []
+    if neg_boost_cols is None:
+        neg_boost_cols = []
+
+    if prepare_column:
+        df = prepare_columns(df, decoy_adjunct=decoy_adjunct)
+        # Avoid running it again in full_fdr
+        prepare_column = False
+
+    def _apply_cutoffs(input_df, cutoffs):
+        df_filtered = input_df
+        col_levels = cutoffs[5:]
+        neg_col_levels = col_levels[len(boost_cols):]
+
+        for i, c in enumerate(boost_cols):
+            df_filtered = df_filtered.filter(
+                (
+                    (pl.col(c) - pl.col(c).min()) /
+                    (pl.col(c).max() - pl.col(c).min())
+                ) >= col_levels[i]
+            )
+
+        for i, c in enumerate(neg_boost_cols):
+            df_filtered = df_filtered.filter(
+                (
+                    (pl.col(c) - pl.col(c).min()) /
+                    (pl.col(c).max() - pl.col(c).min())
+                ) <= neg_col_levels[i]
+            )
+            
+        return full_fdr(
+            df=df_filtered,
+            csm_fdr=cutoffs[0],
+            pep_fdr=cutoffs[1],
+            prot_fdr=cutoffs[2],
+            link_fdr=cutoffs[3],
+            ppi_fdr=cutoffs[4],
+            min_len=min_len,
+            decoy_adjunct=decoy_adjunct,
+            unique_csm=unique_csm,
+            filter_back=filter_back,
+            prepare_column=prepare_column,
+            td_prob=td_prob,
+            td_prot_prob=td_prot_prob,
+            td_dd_ratio=td_dd_ratio,
+            custom_aggs=custom_aggs
+        )
+
+    logger.info("Applying full_fdr for 'self' cutoffs")
+    res_self = _apply_cutoffs(df, cutoffs_self)
+    
+    logger.info("Applying full_fdr for 'between' cutoffs")
+    res_between = _apply_cutoffs(df, cutoffs_between)
+    
+    merged = {}
+    
+    for level in ['csm', 'pep', 'link', 'ppi']:
+        df_self = res_self[level].filter(pl.col('fdr_group').is_in(['self', 'linear', 'overlapping']))
+        df_between = res_between[level].filter(pl.col('fdr_group') == 'between')
+        merged[level] = pl.concat([df_self, df_between], how="vertical")
+        
+    prot_self = res_self['prot']
+    prot_between = res_between['prot']
+    
+    # Identify join keys for proteins
+    # The protein level grouping uses 'protein_group' and 'decoy'
+    join_keys = ['protein_group', 'decoy']
+    
+    merged['prot'] = prot_self.join(
+        prot_between,
+        on=join_keys,
+        how='full',
+        suffix='_between'
+    )
+    # Rename columns from left side to _self
+    rename_cols = {
+        col: f"{col}_self" 
+        for col in prot_self.columns 
+        if col not in join_keys and f"{col}_between" in merged['prot'].columns
+    }
+    merged['prot'] = merged['prot'].rename(rename_cols)
+    
+    return merged

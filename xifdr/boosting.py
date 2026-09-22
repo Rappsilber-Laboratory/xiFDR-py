@@ -80,25 +80,23 @@ def boost(df: pl.DataFrame,
     if neg_boost_cols is None:
         neg_boost_cols = []
     if method == 'manhattan':
-        if boost_group == True:
-            
-            return boost_manhattan(
-                df=df,
-                csm_fdr=csm_fdr,
-                pep_fdr=pep_fdr,
-                prot_fdr=prot_fdr,
-                link_fdr=link_fdr,
-                ppi_fdr=ppi_fdr,
-                boost_cols=boost_cols,
-                neg_boost_cols=neg_boost_cols,
-                boost_level=boost_level,
-                boost_group=boost_group,
-                decoy_adjunct=decoy_adjunct,
-                countdown=countdown,
-                points=points,
-                n_jobs=n_jobs,
-                **kwargs
-            )
+        return boost_manhattan(
+            df=df,
+            csm_fdr=csm_fdr,
+            pep_fdr=pep_fdr,
+            prot_fdr=prot_fdr,
+            link_fdr=link_fdr,
+            ppi_fdr=ppi_fdr,
+            boost_cols=boost_cols,
+            neg_boost_cols=neg_boost_cols,
+            boost_level=boost_level,
+            boost_group=boost_group,
+            decoy_adjunct=decoy_adjunct,
+            countdown=countdown,
+            points=points,
+            n_jobs=n_jobs,
+            **kwargs
+        )
     else:
         raise ValueError(f'Unkown boosting method: {method}')
 
@@ -423,3 +421,58 @@ def _optimization_template(cutoffs,
                 return -tp/df_height
 
     return -tp
+def group_boost(df: pl.DataFrame,
+                csm_fdr: tuple[float, float] = (0.0, 1.0),
+                pep_fdr: tuple[float, float] = (0.0, 1.0),
+                prot_fdr: tuple[float, float] = (0.0, 1.0),
+                link_fdr: tuple[float, float] = (0.0, 1.0),
+                ppi_fdr: tuple[float, float] = (0.0, 1.0),
+                boost_cols: list = None,
+                neg_boost_cols: list = None,
+                boost_level: str = "ppi",
+                method: str = "manhattan",
+                decoy_adjunct: str = "REV_",
+                countdown: int = 3,
+                points: int = 10,
+                n_jobs: int = -1,
+                **kwargs) -> dict[str, list[float]]:
+    """
+    Run boosting separately for 'self' and 'between' FDR groups.
+
+    Returns
+    -------
+        Returns a dict with 'self' and 'between' keys, containing the optimal FDR levels.
+    """
+    if boost_cols is None:
+        boost_cols = []
+    if neg_boost_cols is None:
+        neg_boost_cols = []
+
+    logger.info("Starting boost for group 'self'")
+    params_self = boost(
+        df=df,
+        csm_fdr=csm_fdr, pep_fdr=pep_fdr, prot_fdr=prot_fdr,
+        link_fdr=link_fdr, ppi_fdr=ppi_fdr,
+        boost_cols=boost_cols, neg_boost_cols=neg_boost_cols,
+        boost_level=boost_level, boost_group='self',
+        method=method, decoy_adjunct=decoy_adjunct,
+        countdown=countdown, points=points, n_jobs=n_jobs,
+        **kwargs
+    )
+
+    logger.info("Starting boost for group 'between'")
+    params_between = boost(
+        df=df,
+        csm_fdr=csm_fdr, pep_fdr=pep_fdr, prot_fdr=prot_fdr,
+        link_fdr=link_fdr, ppi_fdr=ppi_fdr,
+        boost_cols=boost_cols, neg_boost_cols=neg_boost_cols,
+        boost_level=boost_level, boost_group='between',
+        method=method, decoy_adjunct=decoy_adjunct,
+        countdown=countdown, points=points, n_jobs=n_jobs,
+        **kwargs
+    )
+
+    return {
+        'self': params_self,
+        'between': params_between
+    }
