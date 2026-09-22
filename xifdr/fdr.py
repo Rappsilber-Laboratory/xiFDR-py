@@ -320,11 +320,12 @@ def _prot_fdr(df_pep:pl.DataFrame,
         score=agg
     ).with_columns(
         no_self=~pl.lit('self').is_in(pl.col('fdr_group')),
+        no_overlapping=~pl.lit('overlapping').is_in(pl.col('fdr_group')),
         no_linear=~pl.lit('linear').is_in(pl.col('fdr_group')),
         between=pl.lit('between').is_in(pl.col('fdr_group')),
     ).with_columns(
         protein_fdr_group=(
-            pl.when(pl.col('between') & pl.col('no_self') & pl.col('no_linear'))
+            pl.when(pl.col('between') & pl.col('no_self') & pl.col('no_overlapping') & pl.col('no_linear'))
             .then(pl.lit('unsupported_between'))
             .otherwise(pl.lit('self_linear_supported'))
         )
