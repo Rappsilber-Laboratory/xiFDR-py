@@ -439,6 +439,37 @@ def group_boost(df: pl.DataFrame,
     """
     Run boosting separately for 'self' and 'between' FDR groups.
 
+    Parameters
+    ----------
+    df
+        CSM DataFrame
+    csm_fdr
+        Search range for CSM FDR level cutoff
+    pep_fdr
+        Search range for peptide FDR level cutoff
+    prot_fdr
+        Search range for protein FDR level cutoff
+    link_fdr
+        Search range for residue link FDR level cutoff
+    ppi_fdr
+        Search range for protein pair FDR level cutoff
+    boost_cols
+        Columns in which to look for lower cutoffs
+    neg_boost_cols
+        Columns in which to look for upper cutoffs
+    boost_level
+        FDR level to boost for
+    method
+        Search algorithm to use
+    decoy_adjunct
+        Prefix/Suffix indicating a decoy match
+    countdown
+        Number interation without improvement to stop
+    points
+        Number of FDR cutoffs to search in one iteration
+    n_jobs
+        Number of threads to use
+
     Returns
     -------
         Returns a dict with 'self' and 'between' keys, containing the optimal FDR levels.
