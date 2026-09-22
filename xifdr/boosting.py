@@ -30,7 +30,7 @@ def boost(df: pl.DataFrame,
           boost_cols: list = None,
           neg_boost_cols: list = None,
           boost_level: str = "ppi",
-          boost_between: bool = True,
+          boost_group: str = None,
           method: str = "manhattan",
           decoy_adjunct: str = "REV_",
           countdown: int = 3,
@@ -60,8 +60,8 @@ def boost(df: pl.DataFrame,
         Columns in which to look for upper cutoffs
     boost_level
         FDR level tp boost for
-    boost_between
-        Whether to boost for between links
+    boost_group
+        Optimize for specific FDR group
     method
         Search algorithm to use
     countdown
@@ -80,23 +80,25 @@ def boost(df: pl.DataFrame,
     if neg_boost_cols is None:
         neg_boost_cols = []
     if method == 'manhattan':
-        return boost_manhattan(
-            df=df,
-            csm_fdr=csm_fdr,
-            pep_fdr=pep_fdr,
-            prot_fdr=prot_fdr,
-            link_fdr=link_fdr,
-            ppi_fdr=ppi_fdr,
-            boost_cols=boost_cols,
-            neg_boost_cols=neg_boost_cols,
-            boost_level=boost_level,
-            boost_between=boost_between,
-            decoy_adjunct=decoy_adjunct,
-            countdown=countdown,
-            points=points,
-            n_jobs=n_jobs,
-            **kwargs
-        )
+        if boost_group == True:
+            
+            return boost_manhattan(
+                df=df,
+                csm_fdr=csm_fdr,
+                pep_fdr=pep_fdr,
+                prot_fdr=prot_fdr,
+                link_fdr=link_fdr,
+                ppi_fdr=ppi_fdr,
+                boost_cols=boost_cols,
+                neg_boost_cols=neg_boost_cols,
+                boost_level=boost_level,
+                boost_group=boost_group,
+                decoy_adjunct=decoy_adjunct,
+                countdown=countdown,
+                points=points,
+                n_jobs=n_jobs,
+                **kwargs
+            )
     else:
         raise ValueError(f'Unkown boosting method: {method}')
 
@@ -109,7 +111,7 @@ def boost_manhattan(df: pl.DataFrame,
                     boost_cols: list = None,
                     neg_boost_cols: list = None,
                     boost_level: str = "ppi",
-                    boost_between: bool = True,
+                    boost_group: str = None,
                     decoy_adjunct: str = "REV_",
                     countdown: int = 3,
                     points: int = 10,
@@ -138,8 +140,8 @@ def boost_manhattan(df: pl.DataFrame,
         Columns where a LOWER value is better (e.g. Mass Error)
     boost_level
         The FDR level to optimize for ('csm', 'pep', 'prot', 'link', 'ppi')
-    boost_between
-        Optimize only for between-protein links
+    boost_group
+        Optimize for specific FDR group
     countdown
         Number of iterations without improvement before stopping
     points
@@ -210,7 +212,7 @@ def boost_manhattan(df: pl.DataFrame,
         boost_cols=boost_cols,
         neg_boost_cols=neg_boost_cols,
         boost_level=boost_level,
-        boost_between=boost_between,
+        boost_group=boost_group,
         decoy_adjunct=decoy_adjunct,
         **kwargs
     )
@@ -322,7 +324,7 @@ def _optimization_template(cutoffs,
                            boost_cols: list = [],
                            neg_boost_cols: list = [],
                            boost_level: str = "ppi",
-                           boost_between: bool = True,
+                           boost_group: bool = None,
                            td_prob: int = 2,
                            td_prot_prob: int = 10,
                            td_dd_ratio: float = 1.0,
@@ -348,8 +350,8 @@ def _optimization_template(cutoffs,
         Columns to filter for LOWER values
     boost_level
         The level to optimize for
-    boost_between
-        Optimize for between links
+    boost_group
+        Optimize for specific FDR group
     td_prob
         Minimum threshold for TT/TD counts (except protein)
     td_prot_prob
@@ -395,8 +397,8 @@ def _optimization_template(cutoffs,
         custom_aggs=custom_aggs
     )
     result = result_all[boost_level]
-    if boost_between:
-        result = result.filter(col('fdr_group') == 'between')
+    if boost_group:
+        result = result.filter(col('fdr_group') == boost_group)
     tt = len(result.filter(col('TT')))
     td = len(result.filter(col('TD')))
     dd = len(result.filter(col('DD')))
