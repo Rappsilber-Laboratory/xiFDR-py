@@ -12,12 +12,6 @@ Use `pip` to install xiFDR from PyPi:
 
     $ pip install xifdr
 
-If you use a free threaded python version install with the nogil option:
-
-.. code-block:: shell
-
-    $ pip install 'xifdr[nogil]'
-
 Input format
 ------------
 
@@ -51,9 +45,72 @@ play special roles in the FDR calculcation:
 Running a full multi-level FDR
 ------------------------------
 
-TODO
+To run a standard multi-level FDR calculation with static cutoffs, use the ``full_fdr`` function. 
+
+.. code-block:: python
+
+    import polars as pl
+    from xifdr.fdr import full_fdr
+    
+    # Load your dataframe
+    df = pl.read_parquet("my_csm_data.parquet")
+    
+    # Calculate FDR at all levels with specific cutoffs
+    results = full_fdr(
+        df,
+        csm_fdr=0.05,
+        pep_fdr=0.05,
+        prot_fdr=0.01,
+        link_fdr=0.05,
+        ppi_fdr=0.05
+    )
+    
+    # The result is a dictionary of DataFrames for each level
+    print(results['csm'].head())
+    print(results['prot'].head())
 
 Running a boosted multi-level FDR
 ---------------------------------
 
-TODO
+If you want xiFDR to automatically find the optimal set of cutoffs that maximizes the number of true positives at a given FDR level (e.g., protein-pair level), use the ``boost`` function. 
+
+.. code-block:: python
+
+    from xifdr.boosting import boost
+    
+    # Find the best cutoffs for a 5% PPI FDR, searching within the given ranges
+    cutoffs = boost(
+        df,
+        csm_fdr=(0.0, 0.2),
+        pep_fdr=(0.0, 0.2),
+        link_fdr=(0.05, 0.05),
+        ppi_fdr=(0.05, 0.05),
+        boost_cols=['coverage_p1', 'coverage_p2'],
+        neg_boost_cols=['charge'],
+        points=10,
+        n_jobs=-1
+    )
+    print("Optimal cutoffs:", cutoffs)
+    
+If you want to perform this optimization separately for ``self`` and ``between`` interactions, you can use ``group_boost`` along with ``group_full_fdr``:
+
+.. code-block:: python
+
+    from xifdr.boosting import group_boost
+    from xifdr.fdr import group_full_fdr
+    
+    # Optimize separately for self and between
+    params_dict = group_boost(
+        df,
+        csm_fdr=(0.0, 0.2),
+        ppi_fdr=(0.05, 0.05),
+        boost_cols=['coverage_p1', 'coverage_p2']
+    )
+    
+    # Apply both sets of parameters and merge the final DataFrames
+    results = group_full_fdr(
+        df,
+        cutoffs_self=params_dict['self'],
+        cutoffs_between=params_dict['between'],
+        boost_cols=['coverage_p1', 'coverage_p2']
+    )

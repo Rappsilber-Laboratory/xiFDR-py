@@ -79,3 +79,11 @@ Validity checks
 For some datasets, very low FDR cutoffs may result in too little data coming through. This may make confidnent FDR
 estimation impossible. To avoid this, we check if the number of target-target matches results in a minimum number of
 decoys ``td_prob`` to be observed (statistically).
+
+Additionally, for the lower levels (except protein), we verify that there are no more decoy-decoy (DD) matches than
+target-decoy (TD) matches, adjusted by the ``td_dd_ratio`` parameter, as this would indicate unreliable target-target 
+(TT) matches or FDR overestimation.
+
+The results of these two validity checks are appended as boolean columns to the output DataFrames for each FDR level 
+(e.g., ``csm_td_check`` and ``csm_dd_check`` for the CSM level). If a check column contains ``False``, a warning is 
+issued during calculation, and those specific subgroups might be statistically unreliable.

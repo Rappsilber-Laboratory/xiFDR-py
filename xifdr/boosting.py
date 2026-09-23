@@ -30,7 +30,7 @@ def boost(df: pl.DataFrame,
           boost_cols: list = None,
           neg_boost_cols: list = None,
           boost_level: str = "ppi",
-          boost_between: bool = True,
+          boost_group: str = None,
           method: str = "manhattan",
           decoy_adjunct: str = "REV_",
           countdown: int = 3,
@@ -60,8 +60,8 @@ def boost(df: pl.DataFrame,
         Columns in which to look for upper cutoffs
     boost_level
         FDR level tp boost for
-    boost_between
-        Whether to boost for between links
+    boost_group
+        Optimize for specific FDR group
     method
         Search algorithm to use
     countdown
@@ -90,7 +90,7 @@ def boost(df: pl.DataFrame,
             boost_cols=boost_cols,
             neg_boost_cols=neg_boost_cols,
             boost_level=boost_level,
-            boost_between=boost_between,
+            boost_group=boost_group,
             decoy_adjunct=decoy_adjunct,
             countdown=countdown,
             points=points,
@@ -109,7 +109,7 @@ def boost_manhattan(df: pl.DataFrame,
                     boost_cols: list = None,
                     neg_boost_cols: list = None,
                     boost_level: str = "ppi",
-                    boost_between: bool = True,
+                    boost_group: str = None,
                     decoy_adjunct: str = "REV_",
                     countdown: int = 3,
                     points: int = 10,
@@ -138,8 +138,8 @@ def boost_manhattan(df: pl.DataFrame,
         Columns where a LOWER value is better (e.g. Mass Error)
     boost_level
         The FDR level to optimize for ('csm', 'pep', 'prot', 'link', 'ppi')
-    boost_between
-        Optimize only for between-protein links
+    boost_group
+        Optimize for specific FDR group
     countdown
         Number of iterations without improvement before stopping
     points
@@ -210,7 +210,7 @@ def boost_manhattan(df: pl.DataFrame,
         boost_cols=boost_cols,
         neg_boost_cols=neg_boost_cols,
         boost_level=boost_level,
-        boost_between=boost_between,
+        boost_group=boost_group,
         decoy_adjunct=decoy_adjunct,
         **kwargs
     )
@@ -322,7 +322,7 @@ def _optimization_template(cutoffs,
                            boost_cols: list = [],
                            neg_boost_cols: list = [],
                            boost_level: str = "ppi",
-                           boost_between: bool = True,
+                           boost_group: bool = None,
                            td_prob: int = 2,
                            td_prot_prob: int = 10,
                            td_dd_ratio: float = 1.0,
@@ -348,8 +348,8 @@ def _optimization_template(cutoffs,
         Columns to filter for LOWER values
     boost_level
         The level to optimize for
-    boost_between
-        Optimize for between links
+    boost_group
+        Optimize for specific FDR group
     td_prob
         Minimum threshold for TT/TD counts (except protein)
     td_prot_prob
@@ -395,8 +395,8 @@ def _optimization_template(cutoffs,
         custom_aggs=custom_aggs
     )
     result = result_all[boost_level]
-    if boost_between:
-        result = result.filter(col('fdr_group') == 'between')
+    if boost_group:
+        result = result.filter(col('fdr_group') == boost_group)
     tt = len(result.filter(col('TT')))
     td = len(result.filter(col('TD')))
     dd = len(result.filter(col('DD')))
@@ -421,3 +421,89 @@ def _optimization_template(cutoffs,
                 return -tp/df_height
 
     return -tp
+def group_boost(df: pl.DataFrame,
+                csm_fdr: tuple[float, float] = (0.0, 1.0),
+                pep_fdr: tuple[float, float] = (0.0, 1.0),
+                prot_fdr: tuple[float, float] = (0.0, 1.0),
+                link_fdr: tuple[float, float] = (0.0, 1.0),
+                ppi_fdr: tuple[float, float] = (0.0, 1.0),
+                boost_cols: list = None,
+                neg_boost_cols: list = None,
+                boost_level: str = "ppi",
+                method: str = "manhattan",
+                decoy_adjunct: str = "REV_",
+                countdown: int = 3,
+                points: int = 10,
+                n_jobs: int = -1,
+                **kwargs) -> dict[str, list[float]]:
+    """
+    Run boosting separately for 'self' and 'between' FDR groups.
+
+    Parameters
+    ----------
+    df
+        CSM DataFrame
+    csm_fdr
+        Search range for CSM FDR level cutoff
+    pep_fdr
+        Search range for peptide FDR level cutoff
+    prot_fdr
+        Search range for protein FDR level cutoff
+    link_fdr
+        Search range for residue link FDR level cutoff
+    ppi_fdr
+        Search range for protein pair FDR level cutoff
+    boost_cols
+        Columns in which to look for lower cutoffs
+    neg_boost_cols
+        Columns in which to look for upper cutoffs
+    boost_level
+        FDR level to boost for
+    method
+        Search algorithm to use
+    decoy_adjunct
+        Prefix/Suffix indicating a decoy match
+    countdown
+        Number interation without improvement to stop
+    points
+        Number of FDR cutoffs to search in one iteration
+    n_jobs
+        Number of threads to use
+
+    Returns
+    -------
+        Returns a dict with 'self' and 'between' keys, containing the optimal FDR levels.
+    """
+    if boost_cols is None:
+        boost_cols = []
+    if neg_boost_cols is None:
+        neg_boost_cols = []
+
+    logger.info("Starting boost for group 'self'")
+    params_self = boost(
+        df=df,
+        csm_fdr=csm_fdr, pep_fdr=pep_fdr, prot_fdr=prot_fdr,
+        link_fdr=link_fdr, ppi_fdr=ppi_fdr,
+        boost_cols=boost_cols, neg_boost_cols=neg_boost_cols,
+        boost_level=boost_level, boost_group='self',
+        method=method, decoy_adjunct=decoy_adjunct,
+        countdown=countdown, points=points, n_jobs=n_jobs,
+        **kwargs
+    )
+
+    logger.info("Starting boost for group 'between'")
+    params_between = boost(
+        df=df,
+        csm_fdr=csm_fdr, pep_fdr=pep_fdr, prot_fdr=prot_fdr,
+        link_fdr=link_fdr, ppi_fdr=ppi_fdr,
+        boost_cols=boost_cols, neg_boost_cols=neg_boost_cols,
+        boost_level=boost_level, boost_group='between',
+        method=method, decoy_adjunct=decoy_adjunct,
+        countdown=countdown, points=points, n_jobs=n_jobs,
+        **kwargs
+    )
+
+    return {
+        'self': params_self,
+        'between': params_between
+    }
