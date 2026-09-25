@@ -28,6 +28,12 @@ fdr_groups_csm_pep = ['self', 'between', 'linear']  # FDR groups for CSM and pep
 fdr_groups_link_ppi = ['self', 'between']  # FDR groups for link and PPI level
 
 
+def _get_columns(df: Union[pl.DataFrame, pl.LazyFrame]) -> list[str]:
+    if isinstance(df, pl.LazyFrame):
+        return df.collect_schema().names()
+    return df.columns
+
+
 def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
              csm_fdr:float = 1.0,
              pep_fdr:float = 1.0,
@@ -112,9 +118,10 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
     ]
 
     # Check for required columns
+    df_cols = _get_columns(df_l)
     missing_columns = [
         c for c in required_columns
-        if c not in df_l.columns
+        if c not in df_cols
     ]
     if len(missing_columns) > 0:
         raise Exception(f'Missing required columns: {missing_columns}')
@@ -127,25 +134,25 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
     ]
     never_agg_cols += ['score', 'protein_score_p1', 'protein_score_p2']
 
-    df_csm_l = _csm_fdr(df_l, csm_fdr, unique_csm, td_prob, td_dd_ratio)
+    df_csm_l = _csm_fdr(df_l, csm_fdr, unique_csm, td_prob, td_dd_ratio).collect().lazy()
 
     # Calculate peptide FDR and filter
     logger.debug('Calculate peptide FDR and filter')
-    df_pep_l = _pep_fdr(df_csm_l, aggs['pep'], pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
+    df_pep_l = _pep_fdr(df_csm_l, aggs['pep'], pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio).collect().lazy()
 
     logger.debug('Calculate protein FDR and filter')
-    df_prot_l = _prot_fdr(df_pep_l, aggs['prot'], prot_fdr, td_prot_prob)
+    df_prot_l = _prot_fdr(df_pep_l, aggs['prot'], prot_fdr, td_prot_prob).collect().lazy()
 
     logger.debug('Filter peptide pairs for passed proteins')
-    df_pep_l = _prot_filter(df_pep_l, df_prot_l, decoy_adjunct)
+    df_pep_l = _prot_filter(df_pep_l, df_prot_l, decoy_adjunct).collect().lazy()
 
     # Calculate link FDR and cutoff
     logger.debug('Calculate link FDR and cutoff')
-    df_link_l = _link_fdr(df_pep_l, aggs['link'], link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
+    df_link_l = _link_fdr(df_pep_l, aggs['link'], link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio).collect().lazy()
 
     # Calculate PPI FDR
     logger.debug('Calculate PPI FDR')
-    df_ppi_l = _ppi_fdr(df_link_l, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
+    df_ppi_l = _ppi_fdr(df_link_l, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio).collect().lazy()
 
     # Back-fitler levels
     df_ppi_l = df_ppi_l.with_columns(pass_threshold=pl.lit(True))
@@ -233,6 +240,10 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
     return res
 
 def _csm_fdr(df_l, csm_fdr, unique_csm, td_prob, td_dd_ratio):
+    is_lazy = isinstance(df_l, pl.LazyFrame)
+    if not is_lazy:
+        df_l = df_l.lazy()
+
     if unique_csm:
         df_csm_l = df_l.sort('score', descending=True).unique(subset=csm_cols, keep='first')
     else:
@@ -254,19 +265,25 @@ def _csm_fdr(df_l, csm_fdr, unique_csm, td_prob, td_dd_ratio):
         csm_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
     )
 
+    csm_cols_list = _get_columns(df_csm_l)
     df_csm_l = df_csm_checks.explode(
         pl.selectors.list()
     ).select(
-        *df_csm_l.columns,
+        *csm_cols_list,
         'csm_td_check',
         'csm_dd_check',
     )
 
-    return df_csm_l
+    return df_csm_l if is_lazy else df_csm_l.collect()
 
 
 def _pep_fdr(df_csm_l, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
-    pep_merge_cols = [c for c in df_csm_l.columns if c not in pep_cols+never_agg_cols]
+    is_lazy = isinstance(df_csm_l, pl.LazyFrame)
+    if not is_lazy:
+        df_csm_l = df_csm_l.lazy()
+
+    csm_cols_list = _get_columns(df_csm_l)
+    pep_merge_cols = [c for c in csm_cols_list if c not in pep_cols+never_agg_cols]
     df_pep_l = df_csm_l.group_by(pep_cols).agg(
         *first_aggs,
         *[
@@ -291,21 +308,26 @@ def _pep_fdr(df_csm_l, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_
         pep_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
     )
 
+    pep_cols_list = _get_columns(df_pep_l)
     df_pep_l = df_pep_checks.explode(
         pl.selectors.list()
     ).select(
-        *df_pep_l.columns,
+        *pep_cols_list,
         'pep_td_check',
         'pep_dd_check',
     )
 
-    return df_pep_l
+    return df_pep_l if is_lazy else df_pep_l.collect()
 
 
-def _prot_fdr(df_pep_l:pl.LazyFrame,
+def _prot_fdr(df_pep_l:Union[pl.DataFrame, pl.LazyFrame],
               agg,
               prot_fdr,
-              td_prot_prob) -> pl.LazyFrame:
+              td_prot_prob) -> Union[pl.DataFrame, pl.LazyFrame]:
+    is_lazy = isinstance(df_pep_l, pl.LazyFrame)
+    if not is_lazy:
+        df_pep_l = df_pep_l.lazy()
+
     # Construct protein (group) DF
     df_prot_p1_l = df_pep_l.select([
         'protein_p1', 'protein_score_p1', 'decoy_p1', 'fdr_group'
@@ -363,33 +385,52 @@ def _prot_fdr(df_pep_l:pl.LazyFrame,
         prot_td_check = pl.col('n_t') * prot_fdr >= td_prot_prob,
     )
 
+    prot_cols_list = _get_columns(df_prot_l)
     df_prot_l = df_prot_checks.explode(
         pl.selectors.list()
     ).select(
-        *df_prot_l.columns,
+        *prot_cols_list,
         'prot_td_check',
     )
 
-    return df_prot_l
+    return df_prot_l if is_lazy else df_prot_l.collect()
 
 
 def _prot_filter(df_pep_l, df_prot_l, decoy_adjunct):
-    passed_prots = (
-        df_prot_l.select('protein')
-        .explode('protein')
-        .select(
-            pl.col('protein')
-            .list.join(';')
-            .str.replace_all(decoy_adjunct, '')
-            .str.split(';')
-            .list.sort()
-            .list.join(';')
-            .alias('passed_prots')
+    is_lazy = isinstance(df_pep_l, pl.LazyFrame)
+    if isinstance(df_prot_l, pl.LazyFrame):
+        passed_prots = (
+            df_prot_l.select('protein')
+            .explode('protein')
+            .select(
+                pl.col('protein')
+                .list.join(';')
+                .str.replace_all(decoy_adjunct, '')
+                .str.split(';')
+                .list.sort()
+                .list.join(';')
+                .alias('passed_prots')
+            )
+            .unique()
+            .collect()
         )
-        .unique()
-        .collect()
-        .lazy()
-    )
+    else:
+        passed_prots = (
+            df_prot_l.select('protein')
+            .explode('protein')
+            .select(
+                pl.col('protein')
+                .list.join(';')
+                .str.replace_all(decoy_adjunct, '')
+                .str.split(';')
+                .list.sort()
+                .list.join(';')
+                .alias('passed_prots')
+            )
+            .unique()
+        )
+
+    passed_prots_join = passed_prots.lazy() if is_lazy else passed_prots
 
     ## Filter left over peptide pairs
     logger.debug('Filter left over peptide pairs')
@@ -419,13 +460,13 @@ def _prot_filter(df_pep_l, df_prot_l, decoy_adjunct):
     )
 
     return df_pep_l.join(
-        passed_prots,
+        passed_prots_join,
         left_on=['base_protein_p1'],
         right_on=['passed_prots'],
         how='inner',
         suffix='p1'
     ).join(
-        passed_prots,
+        passed_prots_join,
         left_on=['base_protein_p2'],
         right_on=['passed_prots'],
         how='inner',
@@ -434,7 +475,12 @@ def _prot_filter(df_pep_l, df_prot_l, decoy_adjunct):
 
 
 def _link_fdr(df_pep_l, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
-    link_merge_cols = [c for c in df_pep_l.columns if c not in link_cols+never_agg_cols]
+    is_lazy = isinstance(df_pep_l, pl.LazyFrame)
+    if not is_lazy:
+        df_pep_l = df_pep_l.lazy()
+
+    pep_cols_list = _get_columns(df_pep_l)
+    link_merge_cols = [c for c in pep_cols_list if c not in link_cols+never_agg_cols]
     df_link_l = df_pep_l.filter(
         pl.col('fdr_group') != "linear" # Disregard linear peptides from here on
     ).group_by(link_cols).agg(
@@ -459,19 +505,25 @@ def _link_fdr(df_pep_l, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_d
         link_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
     )
 
+    link_cols_list = _get_columns(df_link_l)
     df_link_l = df_link_checks.explode(
         pl.selectors.list()
     ).select(
-        *df_link_l.columns,
+        *link_cols_list,
         'link_td_check',
         'link_dd_check',
     )
 
-    return df_link_l
+    return df_link_l if is_lazy else df_link_l.collect()
 
 
 def _ppi_fdr(df_link_l, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
-    ppi_merge_cols = [c for c in df_link_l.columns if c not in ppi_cols+never_agg_cols]
+    is_lazy = isinstance(df_link_l, pl.LazyFrame)
+    if not is_lazy:
+        df_link_l = df_link_l.lazy()
+
+    link_cols_list = _get_columns(df_link_l)
+    ppi_merge_cols = [c for c in link_cols_list if c not in ppi_cols+never_agg_cols]
     df_ppi_l = df_link_l.group_by(ppi_cols).agg(
         *first_aggs,
         *[
@@ -494,15 +546,16 @@ def _ppi_fdr(df_link_l, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd
         ppi_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
     )
 
+    ppi_cols_list = _get_columns(df_ppi_l)
     df_ppi_l = df_ppi_checks.explode(
         pl.selectors.list()
     ).select(
-        *df_ppi_l.columns,
+        *ppi_cols_list,
         'ppi_td_check',
         'ppi_dd_check',
     )
 
-    return df_ppi_l
+    return df_ppi_l if is_lazy else df_ppi_l.collect()
 
 
 def single_grouped_fdr(fdr_group_col: str = "fdr_group",
