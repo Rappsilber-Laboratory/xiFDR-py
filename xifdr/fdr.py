@@ -95,7 +95,7 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
         df = prepare_columns(df)
 
     # Filter CSMs for minimum peptide length
-    df = df.filter(
+    df_l = df.lazy().filter(
         pl.col('sequence_p1').str.replace_all('[^A-Z]', '').str.len_chars() >= min_len,
         pl.col('sequence_p2').str.replace_all('[^A-Z]', '').str.len_chars() >= min_len,
     )
@@ -114,7 +114,7 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
     # Check for required columns
     missing_columns = [
         c for c in required_columns
-        if c not in df.columns
+        if c not in df_l.columns
     ]
     if len(missing_columns) > 0:
         raise Exception(f'Missing required columns: {missing_columns}')
@@ -127,32 +127,32 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
     ]
     never_agg_cols += ['score', 'protein_score_p1', 'protein_score_p2']
 
-    df_csm = _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio)
+    df_csm_l = _csm_fdr(df_l, csm_fdr, unique_csm, td_prob, td_dd_ratio)
 
     # Calculate peptide FDR and filter
     logger.debug('Calculate peptide FDR and filter')
-    df_pep = _pep_fdr(df_csm, aggs['pep'], pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
+    df_pep_l = _pep_fdr(df_csm_l, aggs['pep'], pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
 
     logger.debug('Calculate protein FDR and filter')
-    df_prot = _prot_fdr(df_pep, aggs['prot'], prot_fdr, td_prot_prob)
+    df_prot_l = _prot_fdr(df_pep_l, aggs['prot'], prot_fdr, td_prot_prob)
 
     logger.debug('Filter peptide pairs for passed proteins')
-    df_pep = _prot_filter(df_pep, df_prot, decoy_adjunct)
+    df_pep_l = _prot_filter(df_pep_l, df_prot_l, decoy_adjunct)
 
     # Calculate link FDR and cutoff
     logger.debug('Calculate link FDR and cutoff')
-    df_link = _link_fdr(df_pep, aggs['link'], link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
+    df_link_l = _link_fdr(df_pep_l, aggs['link'], link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
 
     # Calculate PPI FDR
     logger.debug('Calculate PPI FDR')
-    df_ppi = _ppi_fdr(df_link, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
+    df_ppi_l = _ppi_fdr(df_link_l, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
 
     # Back-fitler levels
-    df_ppi = df_ppi.with_columns(pass_threshold=pl.lit(True))
+    df_ppi_l = df_ppi_l.with_columns(pass_threshold=pl.lit(True))
 
     pass_on_cols = [pl.col('score').alias('ppi_score'), 'ppi_fdr', 'pass_threshold']
-    df_link = df_link.join(
-        df_ppi.select(*ppi_cols, *pass_on_cols),
+    df_link_l = df_link_l.join(
+        df_ppi_l.select(*ppi_cols, *pass_on_cols),
         on=ppi_cols,
         how='full',
         coalesce=True,
@@ -161,8 +161,8 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
     )
 
     pass_on_cols += [pl.col('score').alias('link_score'), 'link_fdr']
-    df_pep = df_pep.join(
-        df_link.select(*link_cols, *pass_on_cols),
+    df_pep_l = df_pep_l.join(
+        df_link_l.select(*link_cols, *pass_on_cols),
         on=link_cols,
         how='full',
         coalesce=True,
@@ -171,8 +171,8 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
     )
 
     pass_on_cols += [pl.col('score').alias('pep_score'), 'pep_fdr']
-    df_csm = df_csm.join(
-        df_pep.select(*pep_cols, *pass_on_cols),
+    df_csm_l = df_csm_l.join(
+        df_pep_l.select(*pep_cols, *pass_on_cols),
         on=pep_cols,
         how='full',
         coalesce=True,
@@ -181,36 +181,70 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
     )
 
     if filter_back:
-        df_link = df_link.filter('pass_threshold')
-        df_pep = df_pep.filter('pass_threshold')
-        df_csm = df_csm.filter('pass_threshold')
+        df_link_l = df_link_l.filter('pass_threshold')
+        df_pep_l = df_pep_l.filter('pass_threshold')
+        df_csm_l = df_csm_l.filter('pass_threshold')
 
-    df_ppi = df_ppi.with_columns(
+    df_ppi_l = df_ppi_l.with_columns(
         protein_p1='ppi_protein_p1',
         protein_p2='ppi_protein_p2'
     )
 
-    return {
-        'csm': df_csm,
-        'pep': df_pep,
-        'prot': df_prot,
-        'link': df_link,
-        'ppi': df_ppi,
+    collected = pl.collect_all([df_csm_l, df_pep_l, df_prot_l, df_link_l, df_ppi_l])
+    res = {
+        'csm': collected[0],
+        'pep': collected[1],
+        'prot': collected[2],
+        'link': collected[3],
+        'ppi': collected[4],
     }
 
-def _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio):
+    for level, df_col in res.items():
+        if level == 'prot':
+            group_col = 'protein_fdr_group'
+            level_name = 'protein'
+        else:
+            group_col = 'fdr_group'
+            level_name = {
+                'csm': 'CSM',
+                'pep': 'peptide',
+                'link': 'link',
+                'ppi': 'PPI'
+            }[level]
+
+        td_col = f'{level}_td_check'
+        dd_col = f'{level}_dd_check'
+        
+        check_cols = [group_col]
+        if td_col in df_col.columns:
+            check_cols.append(td_col)
+        if dd_col in df_col.columns:
+            check_cols.append(dd_col)
+            
+        if len(check_cols) > 1:
+            checks = df_col.select(check_cols).unique()
+            for row in checks.to_dicts():
+                fdr_group = row[group_col]
+                if td_col in row and not row[td_col]:
+                    warnings.warn(f'Insufficient TT for {level_name} FDR in group {fdr_group}.')
+                if dd_col in row and not row[dd_col]:
+                    warnings.warn(f'More DD than TT for {level_name} FDR in group {fdr_group}.')
+
+    return res
+
+def _csm_fdr(df_l, csm_fdr, unique_csm, td_prob, td_dd_ratio):
     if unique_csm:
-        df_csm = df.sort('score', descending=True).unique(subset=csm_cols, keep='first')
+        df_csm_l = df_l.sort('score', descending=True).unique(subset=csm_cols, keep='first')
     else:
-        df_csm = df
+        df_csm_l = df_l
 
     # Calculate CSM FDR and cutoff
     logger.debug('Calculate CSM FDR and cutoff')
-    df_csm = df_csm.with_columns(
-        csm_fdr = single_grouped_fdr(df_csm)
+    df_csm_l = df_csm_l.sort('score', descending=True).with_columns(
+        csm_fdr = single_grouped_fdr()
     ).filter(pl.col('csm_fdr').clip(0.0, 1.0) <= csm_fdr)
 
-    df_csm_checks = df_csm.group_by('fdr_group').agg(
+    df_csm_checks = df_csm_l.group_by('fdr_group').agg(
         pl.col('TD').sum().alias('n_td'),
         pl.col('DD').sum().alias('n_dd'),
         pl.col('TT').sum().alias('n_tt'),
@@ -220,29 +254,20 @@ def _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio):
         csm_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
     )
 
-    for row in df_csm_checks.to_dicts():
-        fdr_group = row['fdr_group']
-        td_check = row['csm_td_check']
-        dd_check = row['csm_dd_check']
-        if not td_check:
-            warnings.warn(f'Insufficient TT for CSM FDR in group {fdr_group}.')
-        if not dd_check:
-            warnings.warn(f'More DD than TT for CSM FDR in group {fdr_group}.')
-
-    df_csm = df_csm_checks.explode(
+    df_csm_l = df_csm_checks.explode(
         pl.selectors.list()
     ).select(
-        *df_csm.columns,
+        *df_csm_l.columns,
         'csm_td_check',
         'csm_dd_check',
     )
 
-    return df_csm
+    return df_csm_l
 
 
-def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
-    pep_merge_cols = [c for c in df_csm.columns if c not in pep_cols+never_agg_cols]
-    df_pep = df_csm.group_by(pep_cols).agg(
+def _pep_fdr(df_csm_l, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
+    pep_merge_cols = [c for c in df_csm_l.columns if c not in pep_cols+never_agg_cols]
+    df_pep_l = df_csm_l.group_by(pep_cols).agg(
         *first_aggs,
         *[
             pl.col(c).list.explode()
@@ -252,11 +277,11 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ra
         protein_score_p2=expression_utils.replace_input(agg, 'protein_score_p2'),
         score=agg
     )
-    df_pep = df_pep.with_columns(
-        pep_fdr = single_grouped_fdr(df_pep)
+    df_pep_l = df_pep_l.sort('score', descending=True).with_columns(
+        pep_fdr = single_grouped_fdr()
     ).filter(pl.col('pep_fdr').clip(0.0, 1.0) <= pep_fdr)
 
-    df_pep_checks = df_pep.group_by('fdr_group').agg(
+    df_pep_checks = df_pep_l.group_by('fdr_group').agg(
         pl.col('TD').sum().alias('n_td'),
         pl.col('DD').sum().alias('n_dd'),
         pl.col('TT').sum().alias('n_tt'),
@@ -266,32 +291,23 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ra
         pep_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
     )
 
-    for row in df_pep_checks.to_dicts():
-        fdr_group = row['fdr_group']
-        td_check = row['pep_td_check']
-        dd_check = row['pep_dd_check']
-        if not td_check:
-            warnings.warn(f'Insufficient TT for peptide FDR in group {fdr_group}.')
-        if not dd_check:
-            warnings.warn(f'More DD than TT for peptide FDR in group {fdr_group}.')
-
-    df_pep = df_pep_checks.explode(
+    df_pep_l = df_pep_checks.explode(
         pl.selectors.list()
     ).select(
-        *df_pep.columns,
+        *df_pep_l.columns,
         'pep_td_check',
         'pep_dd_check',
     )
 
-    return df_pep
+    return df_pep_l
 
 
-def _prot_fdr(df_pep:pl.DataFrame,
+def _prot_fdr(df_pep_l:pl.LazyFrame,
               agg,
               prot_fdr,
-              td_prot_prob) -> pl.DataFrame:
+              td_prot_prob) -> pl.LazyFrame:
     # Construct protein (group) DF
-    df_prot_p1 = df_pep.select([
+    df_prot_p1_l = df_pep_l.select([
         'protein_p1', 'protein_score_p1', 'decoy_p1', 'fdr_group'
     ]).rename({
         'protein_p1': 'protein',
@@ -299,7 +315,7 @@ def _prot_fdr(df_pep:pl.DataFrame,
         'decoy_p1': 'decoy',
     })
 
-    df_prot_p2 = df_pep.select([
+    df_prot_p2_l = df_pep_l.select([
         'protein_p2', 'protein_score_p2', 'decoy_p2', 'fdr_group'
     ]).rename({
         'protein_p2': 'protein',
@@ -307,14 +323,14 @@ def _prot_fdr(df_pep:pl.DataFrame,
         'decoy_p2': 'decoy',
     })
 
-    df_prot = pl.concat([
-        df_prot_p1,
-        df_prot_p2
+    df_prot_l = pl.concat([
+        df_prot_p1_l,
+        df_prot_p2_l
     ])
-    df_prot = df_prot.with_columns(
+    df_prot_l = df_prot_l.with_columns(
         protein_group=pl.col('protein').list.unique().list.sort()
     )
-    df_prot = df_prot.group_by(['protein_group', 'decoy']).agg(
+    df_prot_l = df_prot_l.group_by(['protein_group', 'decoy']).agg(
         pl.col('protein'),
         pl.col('fdr_group'),
         score=agg
@@ -329,47 +345,55 @@ def _prot_fdr(df_pep:pl.DataFrame,
             .then(pl.lit('unsupported_between'))
             .otherwise(pl.lit('self_linear_supported'))
         )
-    )
-    df_prot = df_prot.with_columns(
+    ).with_columns(
         TD=pl.col('decoy'),
         TT=~pl.col('decoy'),
         DD=pl.lit(False)  # Abuse CL-FDR for linear case
     )
-    df_prot = df_prot.with_columns(
-        prot_fdr=single_grouped_fdr(df_prot, fdr_group_col='protein_fdr_group')
+    df_prot_l = df_prot_l.sort('score', descending=True).with_columns(
+        prot_fdr=single_grouped_fdr(fdr_group_col='protein_fdr_group')
     )
-    df_prot = df_prot.filter(pl.col('prot_fdr').clip(0.0, 1.0) <= prot_fdr)
+    df_prot_l = df_prot_l.filter(pl.col('prot_fdr').clip(0.0, 1.0) <= prot_fdr)
 
     # Check whether there are at least enough TT to have approx. `min_td` TD matches under the requested FDR level.
-    df_prot_checks = df_prot.group_by('protein_fdr_group').agg(
+    df_prot_checks = df_prot_l.group_by('protein_fdr_group').agg(
         pl.col('TT').sum().alias('n_t'),
         pl.all(),
     ).with_columns(
         prot_td_check = pl.col('n_t') * prot_fdr >= td_prot_prob,
     )
 
-    df_prot = df_prot_checks.explode(
+    df_prot_l = df_prot_checks.explode(
         pl.selectors.list()
     ).select(
-        *df_prot.columns,
+        *df_prot_l.columns,
         'prot_td_check',
     )
 
-    return df_prot
+    return df_prot_l
 
 
-def _prot_filter(df_pep, df_prot, decoy_adjunct):
-    passed_prots = df_prot['protein'].explode()
-    passed_prots = passed_prots.list.join(';')
-    passed_prots = passed_prots.str.replace_all(decoy_adjunct, '')
-    passed_prots = passed_prots.str.split(';')
-    passed_prots = passed_prots.list.sort()
-    passed_prots = passed_prots.list.join(';')
-    passed_prots = passed_prots.unique().alias('passed_prots')
+def _prot_filter(df_pep_l, df_prot_l, decoy_adjunct):
+    passed_prots = (
+        df_prot_l.select('protein')
+        .explode('protein')
+        .select(
+            pl.col('protein')
+            .list.join(';')
+            .str.replace_all(decoy_adjunct, '')
+            .str.split(';')
+            .list.sort()
+            .list.join(';')
+            .alias('passed_prots')
+        )
+        .unique()
+        .collect()
+        .lazy()
+    )
 
     ## Filter left over peptide pairs
     logger.debug('Filter left over peptide pairs')
-    df_pep = df_pep.with_columns(
+    df_pep_l = df_pep_l.with_columns(
         base_protein_p1 = (
             pl.col('protein_p1')
                 # Replace decoy_adjunct
@@ -394,14 +418,14 @@ def _prot_filter(df_pep, df_prot, decoy_adjunct):
         ),
     )
 
-    return df_pep.join(
-        passed_prots.to_frame(),
+    return df_pep_l.join(
+        passed_prots,
         left_on=['base_protein_p1'],
         right_on=['passed_prots'],
         how='inner',
         suffix='p1'
     ).join(
-        passed_prots.to_frame(),
+        passed_prots,
         left_on=['base_protein_p2'],
         right_on=['passed_prots'],
         how='inner',
@@ -409,9 +433,9 @@ def _prot_filter(df_pep, df_prot, decoy_adjunct):
     )
 
 
-def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
-    link_merge_cols = [c for c in df_pep.columns if c not in link_cols+never_agg_cols]
-    df_link = df_pep.filter(
+def _link_fdr(df_pep_l, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
+    link_merge_cols = [c for c in df_pep_l.columns if c not in link_cols+never_agg_cols]
+    df_link_l = df_pep_l.filter(
         pl.col('fdr_group') != "linear" # Disregard linear peptides from here on
     ).group_by(link_cols).agg(
         *first_aggs,
@@ -421,11 +445,11 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_
         ],
         score=agg
     )
-    df_link = df_link.with_columns(
-        link_fdr = single_grouped_fdr(df_link)
+    df_link_l = df_link_l.sort('score', descending=True).with_columns(
+        link_fdr = single_grouped_fdr()
     ).filter(pl.col('link_fdr').clip(0.0, 1.0) <= link_fdr)
 
-    df_link_checks = df_link.group_by('fdr_group').agg(
+    df_link_checks = df_link_l.group_by('fdr_group').agg(
         pl.col('TD').sum().alias('n_td'),
         pl.col('DD').sum().alias('n_dd'),
         pl.col('TT').sum().alias('n_tt'),
@@ -435,29 +459,20 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_
         link_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
     )
 
-    for row in df_link_checks.to_dicts():
-        fdr_group = row['fdr_group']
-        td_check = row['link_td_check']
-        dd_check = row['link_dd_check']
-        if not td_check:
-            warnings.warn(f'Insufficient TT for link FDR in group {fdr_group}.')
-        if not dd_check:
-            warnings.warn(f'More DD than TT for link FDR in group {fdr_group}.')
-
-    df_link = df_link_checks.explode(
+    df_link_l = df_link_checks.explode(
         pl.selectors.list()
     ).select(
-        *df_link.columns,
+        *df_link_l.columns,
         'link_td_check',
         'link_dd_check',
     )
 
-    return df_link
+    return df_link_l
 
 
-def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
-    ppi_merge_cols = [c for c in df_link.columns if c not in ppi_cols+never_agg_cols]
-    df_ppi = df_link.group_by(ppi_cols).agg(
+def _ppi_fdr(df_link_l, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
+    ppi_merge_cols = [c for c in df_link_l.columns if c not in ppi_cols+never_agg_cols]
+    df_ppi_l = df_link_l.group_by(ppi_cols).agg(
         *first_aggs,
         *[
             pl.col(c).list.explode()
@@ -465,11 +480,11 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_r
         ],
         score=agg
     )
-    df_ppi = df_ppi.with_columns(
-        ppi_fdr = single_grouped_fdr(df_ppi)
+    df_ppi_l = df_ppi_l.sort('score', descending=True).with_columns(
+        ppi_fdr = single_grouped_fdr()
     ).filter(pl.col('ppi_fdr').clip(0.0, 1.0) <= ppi_fdr)
 
-    df_ppi_checks = df_ppi.group_by('fdr_group').agg(
+    df_ppi_checks = df_ppi_l.group_by('fdr_group').agg(
         pl.col('TD').sum().alias('n_td'),
         pl.col('DD').sum().alias('n_dd'),
         pl.col('TT').sum().alias('n_tt'),
@@ -479,98 +494,67 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_r
         ppi_dd_check = pl.col('n_dd') * td_dd_ratio <= pl.col('n_td'),
     )
 
-    for row in df_ppi_checks.to_dicts():
-        fdr_group = row['fdr_group']
-        td_check = row['ppi_td_check']
-        dd_check = row['ppi_dd_check']
-        if not td_check:
-            warnings.warn(f'Insufficient TT for PPI FDR in group {fdr_group}.')
-        if not dd_check:
-            warnings.warn(f'More DD than TT for PPI FDR in group {fdr_group}.')
-
-    df_ppi = df_ppi_checks.explode(
+    df_ppi_l = df_ppi_checks.explode(
         pl.selectors.list()
     ).select(
-        *df_ppi.columns,
+        *df_ppi_l.columns,
         'ppi_td_check',
         'ppi_dd_check',
     )
 
-    return df_ppi
+    return df_ppi_l
 
 
-def single_grouped_fdr(df: Union[pl.DataFrame, pd.DataFrame],
-                       fdr_group_col: str = "fdr_group",
-                       unpaired_groups: list[str] = None) -> pl.Series:
+def single_grouped_fdr(fdr_group_col: str = "fdr_group",
+                       unpaired_groups: list[str] = None) -> pl.Expr:
     """
-    Computes the false discovery rate (FDR) for a given DF.
+    Computes the false discovery rate (FDR) expression for a given group.
+    Assumes the DataFrame will be sorted by score descending before evaluating.
 
     Parameters
     ----------
-    df : pl.DataFrame|pd.DataFrame
-        The input DF containing columns for TT, TD, DD, decoy_class and score.
     fdr_group_col : str
         The column name for grouping
+    unpaired_groups : list[str]
+        List of groups to treat as unpaired (TD = DD, DD = 0)
 
     Returns
     -------
-    pl.Series
-        A polars series containing the FDR for each row of the input.
+    pl.Expr
+        A polars expression computing the FDR.
     """
-    if not isinstance(df, pl.DataFrame):
-        df: pl.DataFrame = pl.DataFrame(df)
-
-    order_col = 'order_col'
-    while order_col in df.columns:
-        order_col += '_'
-
-    df = df.with_row_index(order_col)
-    fdr_with_order = pl.DataFrame(
-        schema={**df.schema, **{'fdr': pl.Float32}}
-    )
-    fdr_with_order = fdr_with_order.with_columns(
-        fdr = pl.lit(0.0)
-    )
-    fdr_groups = df[fdr_group_col].unique().to_list()
-    for fdr_group in fdr_groups:
-        class_df = df.filter(
-            pl.col(fdr_group_col) == fdr_group
-        )
-        if unpaired_groups and fdr_group in unpaired_groups:
-            # Unpaird groups don't have proper TD matched
-            class_df = class_df.with_columns(
-                TD = 'DD',
-                DD = pl.lit(False)
-            )
-        class_df = class_df.with_columns(
-            single_fdr(class_df)
-        )
-        fdr_with_order = fdr_with_order.extend(class_df)
-
-    return fdr_with_order.sort(order_col)['fdr']
+    td_col = pl.col('TD').cast(pl.Int32)
+    dd_col = pl.col('DD').cast(pl.Int32)
+    
+    if unpaired_groups:
+        is_unpaired = pl.col(fdr_group_col).is_in(unpaired_groups)
+        td_col = pl.when(is_unpaired).then(pl.col('DD').cast(pl.Int32)).otherwise(td_col)
+        dd_col = pl.when(is_unpaired).then(pl.lit(0)).otherwise(dd_col)
+        
+    td_cum = td_col.cum_sum().over(fdr_group_col)
+    dd_cum = dd_col.cum_sum().over(fdr_group_col)
+    tt_cum = pl.col('TT').cast(pl.Int32).cum_sum().over(fdr_group_col)
+    
+    fdr_raw = (td_cum - dd_cum) / tt_cum
+    return fdr_raw.clip(lower_bound=0).reverse().cum_min().reverse().over(fdr_group_col)
 
 
-def single_fdr(df: Union[pl.DataFrame, pd.DataFrame]) -> pl.Series:
-    working_df = df.select([
-        'TT',
-        'TD',
-        'DD',
-        'score'
-    ])
-    order_col = 'order_col'
-    while order_col in df.columns:
-        order_col += '_'
+def single_fdr() -> pl.Expr:
+    """
+    Computes the single false discovery rate (FDR) expression.
+    Assumes the DataFrame will be sorted by score descending before evaluating.
 
-    working_df = working_df.with_row_index(order_col)
-    working_df = working_df.sort('score', descending=True)
-    fdr_raw = (
-        (working_df['TD'].cast(pl.Int32).cum_sum() - working_df['DD'].cast(pl.Int32).cum_sum())
-        / working_df['TT'].cast(pl.Int32).cum_sum()
-    )
-    working_df = working_df.with_columns(
-        fdr = fdr_raw.clip(lower_bound=0).reverse().cum_min().reverse()
-    )
-    return working_df.sort(order_col)['fdr']
+    Returns
+    -------
+    pl.Expr
+        A polars expression computing the FDR.
+    """
+    td_cum = pl.col('TD').cast(pl.Int32).cum_sum()
+    dd_cum = pl.col('DD').cast(pl.Int32).cum_sum()
+    tt_cum = pl.col('TT').cast(pl.Int32).cum_sum()
+    
+    fdr_raw = (td_cum - dd_cum) / tt_cum
+    return fdr_raw.clip(lower_bound=0).reverse().cum_min().reverse()
 
 
 def group_full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
@@ -636,12 +620,12 @@ def group_full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
         prepare_column = False
 
     def _apply_cutoffs(input_df, cutoffs):
-        df_filtered = input_df
+        df_filtered_l = input_df.lazy()
         col_levels = cutoffs[5:]
         neg_col_levels = col_levels[len(boost_cols):]
 
         for i, c in enumerate(boost_cols):
-            df_filtered = df_filtered.filter(
+            df_filtered_l = df_filtered_l.filter(
                 (
                     (pl.col(c) - pl.col(c).min()) /
                     (pl.col(c).max() - pl.col(c).min())
@@ -649,7 +633,7 @@ def group_full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
             )
 
         for i, c in enumerate(neg_boost_cols):
-            df_filtered = df_filtered.filter(
+            df_filtered_l = df_filtered_l.filter(
                 (
                     (pl.col(c) - pl.col(c).min()) /
                     (pl.col(c).max() - pl.col(c).min())
@@ -657,7 +641,7 @@ def group_full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
             )
             
         return full_fdr(
-            df=df_filtered,
+            df=df_filtered_l.collect(),
             csm_fdr=cutoffs[0],
             pep_fdr=cutoffs[1],
             prot_fdr=cutoffs[2],

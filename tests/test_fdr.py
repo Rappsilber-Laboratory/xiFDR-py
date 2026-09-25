@@ -62,11 +62,9 @@ def test_single_fdr_large():
         dd_df
     ])
 
-    df = df.with_columns(
-        single_fdr(df)
+    df = df.sort('score', descending=True).with_columns(
+        fdr=single_fdr()
     )
-
-    df = df.sort('score', descending=True)
 
     # Check that FDR is 0 before first TD
     assert(
@@ -125,11 +123,10 @@ def test_single_fdr_monotone():
         orient = "row"
     ).sample(len(matches), shuffle=True, seed=0)
 
-    df = df.with_columns(
-        single_fdr(df)
+    df = df.sort('score', descending=True).with_columns(
+        fdr=single_fdr()
     )
 
-    df = df.sort('score')
 
     assert(all(df['fdr'] == df['exp_fdr']))
 
@@ -319,9 +316,8 @@ def test_unpaired_fdr():
         }
     )
 
-    df = df.with_columns(
-        single_grouped_fdr(
-            df,
+    df = df.sort('score', descending=True).with_columns(
+        fdr=single_grouped_fdr(
             unpaired_groups=['overlapping']
         )
     )
