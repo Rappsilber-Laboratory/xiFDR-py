@@ -25,7 +25,8 @@ def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
                td_prob: int = 2,
                td_prot_prob: int = 10,
                td_dd_ratio: float = 1.0,
-               custom_aggs: dict = None) -> tuple[float, float, float, float]:
+               custom_aggs: dict = None,
+               window_size: int = 5) -> tuple[float, float, float, float]:
     """
 
     Parameters
@@ -52,6 +53,8 @@ def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
         Minimum ratio of TD/DD
     custom_aggs
         Custom aggregation functions for the FDR levels
+    window_size
+        Number of TD matches per sliding window for interpolated decoy FDR estimation
 
     Returns
     -------
@@ -103,7 +106,7 @@ def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
     ]
     never_agg_cols += ['score', 'protein_score_p1', 'protein_score_p2']
 
-    df_csm = _csm_fdr(df, 1, unique_csm, td_prob, td_dd_ratio)
+    df_csm = _csm_fdr(df, 1, unique_csm, td_prob, td_dd_ratio, window_size=window_size)
     x = np.linspace(0, 1, points, endpoint=True)
     y = np.array([
         df_csm.filter(pl.col('csm_fdr') <= _x).height
@@ -124,7 +127,7 @@ def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
 
     # Calculate peptide FDR and filter
     logger.debug('Calculate peptide FDR and filter')
-    df_pep = _pep_fdr(df_csm, aggs['pep'], 1.0, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
+    df_pep = _pep_fdr(df_csm, aggs['pep'], 1.0, first_aggs, never_agg_cols, td_prob, td_dd_ratio, window_size=window_size)
 
     x = np.linspace(0, 1, points, endpoint=True)
     y = np.array([
@@ -146,7 +149,7 @@ def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
 
     # Calculate protein FDR and filter
     logger.debug('Calculate protein FDR and filter')
-    df_prot = _prot_fdr(df_pep, aggs['prot'], 1.0, td_prot_prob)
+    df_prot = _prot_fdr(df_pep, aggs['prot'], 1.0, td_prot_prob, window_size=window_size)
     x = np.linspace(0, 1, points, endpoint=True)
     y = np.array([
         df_prot.filter(pl.col('prot_fdr') <= _x).height
@@ -170,7 +173,7 @@ def find_knees(df: Union[pl.DataFrame, pd.DataFrame],
 
     # Calculate link FDR and cutoff
     logger.debug('Calculate link FDR and cutoff')
-    df_link = _link_fdr(df_pep, aggs['link'], 1.0, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
+    df_link = _link_fdr(df_pep, aggs['link'], 1.0, first_aggs, never_agg_cols, td_prob, td_dd_ratio, window_size=window_size)
     x = np.linspace(0, 1, points, endpoint=True)
     y = np.array([
         df_link.filter(pl.col('link_fdr') <= _x).height

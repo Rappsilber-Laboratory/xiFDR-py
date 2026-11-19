@@ -326,7 +326,8 @@ def _optimization_template(cutoffs,
                            td_prob: int = 2,
                            td_prot_prob: int = 10,
                            td_dd_ratio: float = 1.0,
-                           custom_aggs: dict = None) -> float:
+                           custom_aggs: dict = None,
+                           window_size: int = 5) -> float:
     """
     Template for parallel optimization and calculation of the score.
 
@@ -358,6 +359,8 @@ def _optimization_template(cutoffs,
         Minimum ratio for matching DD/TD
     custom_aggs
         Custom aggregation expressions for the FDR levels
+    window_size
+        Number of TD matches per sliding window for interpolated decoy FDR estimation
 
     Returns
     -------
@@ -392,7 +395,8 @@ def _optimization_template(cutoffs,
         td_prob=0,
         td_prot_prob=td_prot_prob,
         td_dd_ratio=0,
-        custom_aggs=custom_aggs
+        custom_aggs=custom_aggs,
+        window_size=window_size
     )
     result = result_all[boost_level]
     if boost_between:

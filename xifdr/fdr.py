@@ -2,6 +2,7 @@ import logging
 import warnings
 from typing import Union
 
+import numpy as np
 import pandas as pd
 import polars as pl
 from xifdr.utils.column_preparation import prepare_columns
@@ -42,7 +43,8 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
              td_prob:int = 2,
              td_prot_prob:int = 10,
              td_dd_ratio:float = 1.0,
-             custom_aggs:dict = None) -> dict[str, pl.DataFrame]:
+             custom_aggs:dict = None,
+             window_size: int = 5) -> dict[str, pl.DataFrame]:
     """
     
     Parameters
@@ -77,6 +79,8 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
         Minimum ratio of TD/DD
     custom_aggs
         Custom aggregation functions for the FDR levels
+    window_size
+        Number of TD matches per sliding window for interpolated decoy FDR estimation
 
     Returns
     -------
@@ -127,25 +131,25 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
     ]
     never_agg_cols += ['score', 'protein_score_p1', 'protein_score_p2']
 
-    df_csm = _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio)
+    df_csm = _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio, window_size=window_size)
 
     # Calculate peptide FDR and filter
     logger.debug('Calculate peptide FDR and filter')
-    df_pep = _pep_fdr(df_csm, aggs['pep'], pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
+    df_pep = _pep_fdr(df_csm, aggs['pep'], pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio, window_size=window_size)
 
     logger.debug('Calculate protein FDR and filter')
-    df_prot = _prot_fdr(df_pep, aggs['prot'], prot_fdr, td_prot_prob)
+    df_prot = _prot_fdr(df_pep, aggs['prot'], prot_fdr, td_prot_prob, window_size=window_size)
 
     logger.debug('Filter peptide pairs for passed proteins')
     df_pep = _prot_filter(df_pep, df_prot, decoy_adjunct)
 
     # Calculate link FDR and cutoff
     logger.debug('Calculate link FDR and cutoff')
-    df_link = _link_fdr(df_pep, aggs['link'], link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
+    df_link = _link_fdr(df_pep, aggs['link'], link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio, window_size=window_size)
 
     # Calculate PPI FDR
     logger.debug('Calculate PPI FDR')
-    df_ppi = _ppi_fdr(df_link, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio)
+    df_ppi = _ppi_fdr(df_link, aggs['prot'], ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio, window_size=window_size)
 
     # Back-fitler levels
     df_ppi = df_ppi.with_columns(pass_threshold=pl.lit(True))
@@ -198,7 +202,7 @@ def full_fdr(df: Union[pl.DataFrame, pd.DataFrame],
         'ppi': df_ppi,
     }
 
-def _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio):
+def _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio, window_size: int = 5):
     if unique_csm:
         df_csm = df.sort('score', descending=True).unique(subset=csm_cols, keep='first')
     else:
@@ -207,7 +211,7 @@ def _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio):
     # Calculate CSM FDR and cutoff
     logger.debug('Calculate CSM FDR and cutoff')
     df_csm = df_csm.with_columns(
-        csm_fdr = single_grouped_fdr(df_csm)
+        csm_fdr = single_grouped_fdr(df_csm, window_size=window_size)
     ).filter(pl.col('csm_fdr').clip(0.0, 1.0) <= csm_fdr)
 
     df_csm_checks = df_csm.group_by('fdr_group').agg(
@@ -240,7 +244,7 @@ def _csm_fdr(df, csm_fdr, unique_csm, td_prob, td_dd_ratio):
     return df_csm
 
 
-def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
+def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio, window_size: int = 5):
     pep_merge_cols = [c for c in df_csm.columns if c not in pep_cols+never_agg_cols]
     df_pep = df_csm.group_by(pep_cols).agg(
         *first_aggs,
@@ -253,7 +257,7 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ra
         score=agg
     )
     df_pep = df_pep.with_columns(
-        pep_fdr = single_grouped_fdr(df_pep)
+        pep_fdr = single_grouped_fdr(df_pep, window_size=window_size)
     ).filter(pl.col('pep_fdr').clip(0.0, 1.0) <= pep_fdr)
 
     df_pep_checks = df_pep.group_by('fdr_group').agg(
@@ -289,7 +293,8 @@ def _pep_fdr(df_csm, agg, pep_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ra
 def _prot_fdr(df_pep:pl.DataFrame,
               agg,
               prot_fdr,
-              td_prot_prob) -> pl.DataFrame:
+              td_prot_prob,
+              window_size: int = 5) -> pl.DataFrame:
     # Construct protein (group) DF
     df_prot_p1 = df_pep.select([
         'protein_p1', 'protein_score_p1', 'decoy_p1', 'fdr_group'
@@ -336,7 +341,7 @@ def _prot_fdr(df_pep:pl.DataFrame,
         DD=pl.lit(False)  # Abuse CL-FDR for linear case
     )
     df_prot = df_prot.with_columns(
-        prot_fdr=single_grouped_fdr(df_prot, fdr_group_col='protein_fdr_group')
+        prot_fdr=single_grouped_fdr(df_prot, fdr_group_col='protein_fdr_group', window_size=window_size)
     )
     df_prot = df_prot.filter(pl.col('prot_fdr').clip(0.0, 1.0) <= prot_fdr)
 
@@ -409,7 +414,7 @@ def _prot_filter(df_pep, df_prot, decoy_adjunct):
     )
 
 
-def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
+def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio, window_size: int = 5):
     link_merge_cols = [c for c in df_pep.columns if c not in link_cols+never_agg_cols]
     df_link = df_pep.filter(
         pl.col('fdr_group') != "linear" # Disregard linear peptides from here on
@@ -422,7 +427,7 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_
         score=agg
     )
     df_link = df_link.with_columns(
-        link_fdr = single_grouped_fdr(df_link)
+        link_fdr = single_grouped_fdr(df_link, window_size=window_size)
     ).filter(pl.col('link_fdr').clip(0.0, 1.0) <= link_fdr)
 
     df_link_checks = df_link.group_by('fdr_group').agg(
@@ -455,7 +460,7 @@ def _link_fdr(df_pep, agg, link_fdr, first_aggs, never_agg_cols, td_prob, td_dd_
     return df_link
 
 
-def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio):
+def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_ratio, window_size: int = 5):
     ppi_merge_cols = [c for c in df_link.columns if c not in ppi_cols+never_agg_cols]
     df_ppi = df_link.group_by(ppi_cols).agg(
         *first_aggs,
@@ -466,7 +471,7 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_r
         score=agg
     )
     df_ppi = df_ppi.with_columns(
-        ppi_fdr = single_grouped_fdr(df_ppi)
+        ppi_fdr = single_grouped_fdr(df_ppi, window_size=window_size)
     ).filter(pl.col('ppi_fdr').clip(0.0, 1.0) <= ppi_fdr)
 
     df_ppi_checks = df_ppi.group_by('fdr_group').agg(
@@ -501,7 +506,8 @@ def _ppi_fdr(df_link, agg, ppi_fdr, first_aggs, never_agg_cols, td_prob, td_dd_r
 
 def single_grouped_fdr(df: Union[pl.DataFrame, pd.DataFrame],
                        fdr_group_col: str = "fdr_group",
-                       unpaired_groups: list[str] = None) -> pl.Series:
+                       unpaired_groups: list[str] = None,
+                       window_size: int = 5) -> pl.Series:
     """
     Computes the false discovery rate (FDR) for a given DF.
 
@@ -511,6 +517,10 @@ def single_grouped_fdr(df: Union[pl.DataFrame, pd.DataFrame],
         The input DF containing columns for TT, TD, DD, decoy_class and score.
     fdr_group_col : str
         The column name for grouping
+    unpaired_groups : list[str], optional
+        Groups where TD matches are absent and DD matches should be treated as TD.
+    window_size : int
+        Number of TD matches per sliding window for interpolated decoy FDR estimation.
 
     Returns
     -------
@@ -526,10 +536,7 @@ def single_grouped_fdr(df: Union[pl.DataFrame, pd.DataFrame],
 
     df = df.with_row_index(order_col)
     fdr_with_order = pl.DataFrame(
-        schema={**df.schema, **{'fdr': pl.Float32}}
-    )
-    fdr_with_order = fdr_with_order.with_columns(
-        fdr = pl.lit(0.0)
+        schema={**df.schema, **{'fdr': pl.Float64}}
     )
     fdr_groups = df[fdr_group_col].unique().to_list()
     for fdr_group in fdr_groups:
@@ -543,31 +550,134 @@ def single_grouped_fdr(df: Union[pl.DataFrame, pd.DataFrame],
                 DD = pl.lit(False)
             )
         class_df = class_df.with_columns(
-            single_fdr(class_df)
+            single_fdr(class_df, window_size=window_size)
         )
         fdr_with_order = fdr_with_order.extend(class_df)
 
     return fdr_with_order.sort(order_col)['fdr']
 
 
-def single_fdr(df: Union[pl.DataFrame, pd.DataFrame]) -> pl.Series:
-    working_df = df.select([
-        'TT',
-        'TD',
-        'DD',
-        'score'
-    ])
+def _clipped_window_fdr(
+    w_tt: np.ndarray, w_td: np.ndarray, w_dd: np.ndarray
+) -> np.ndarray:
+    """Compute clipped (TD - DD) / TT for each window, handling TT == 0 safely."""
+    w_fp = w_td - w_dd
+    safe_tt = np.where(w_tt > 0, w_tt, 1)
+    return np.where(
+        w_tt > 0,
+        np.clip(w_fp / safe_tt, 0.0, 1.0),
+        np.where(w_fp > 0, 1.0, 0.0),
+    )
+
+
+def single_fdr(df: Union[pl.DataFrame, pd.DataFrame], window_size: int = 5) -> pl.Series:
+    """
+    Compute monotonic global q-values using a sliding-window interpolated decoy local FDR.
+
+    Matches are ordered from lowest to highest score. Windows of `window_size` TD
+    matches slide one TD at a time, estimating each window's local false-positive
+    ratio `(TD - DD) / TT` clipped to `[0.0, 1.0]`. Overlapping window values per
+    match are averaged, the post-last-TD tail extends from the last window's start
+    to each trailing match, and local FDRs on TT matches are integrated cumulatively
+    from highest to lowest score and made monotonic.
+
+    Parameters
+    ----------
+    df : pl.DataFrame|pd.DataFrame
+        Input DataFrame containing `TT`, `TD`, `DD`, and `score` columns.
+    window_size : int
+        Number of TD matches in each sliding window (default 5).
+
+    Returns
+    -------
+    pl.Series
+        A Float64 polars Series named `'fdr'` aligned to the input row order.
+    """
+    if not isinstance(df, pl.DataFrame):
+        df = pl.DataFrame(df)
+    if window_size < 1:
+        raise ValueError("window_size must be at least 1")
+
+    n = df.height
+    if n == 0:
+        return pl.Series('fdr', [], dtype=pl.Float64)
+
     order_col = 'order_col'
     while order_col in df.columns:
         order_col += '_'
 
-    working_df = working_df.with_row_index(order_col)
-    working_df = working_df.sort('score', descending=True)
-    fdr_raw = (
-        (working_df['TD'].cast(pl.Int32).cum_sum() - working_df['DD'].cast(pl.Int32).cum_sum())
-        / working_df['TT'].cast(pl.Int32).cum_sum()
+    working_df = (
+        df.select(['TT', 'TD', 'DD', 'score'])
+        .with_row_index(order_col)
+        .sort('score', descending=False, maintain_order=True)
     )
-    working_df = working_df.with_columns(
-        fdr = fdr_raw.clip(lower_bound=0).reverse().cum_min().reverse()
-    )
+    tt = working_df['TT'].cast(pl.Boolean).fill_null(False).to_numpy().astype(np.int64)
+    td = working_df['TD'].cast(pl.Boolean).fill_null(False).to_numpy().astype(np.int64)
+    dd = working_df['DD'].cast(pl.Boolean).fill_null(False).to_numpy().astype(np.int64)
+
+    td_idx = np.flatnonzero(td)
+    m = len(td_idx)
+    if m == 0:
+        fdr_asc = np.zeros(n, dtype=np.float64)
+    else:
+        pref_tt = np.empty(n + 1, dtype=np.int64)
+        pref_tt[0] = 0
+        np.cumsum(tt, out=pref_tt[1:])
+        pref_td = np.empty(n + 1, dtype=np.int64)
+        pref_td[0] = 0
+        np.cumsum(td, out=pref_td[1:])
+        pref_dd = np.empty(n + 1, dtype=np.int64)
+        pref_dd[0] = 0
+        np.cumsum(dd, out=pref_dd[1:])
+
+        eff_w = min(window_size, m)
+        k = m - eff_w + 1
+        starts = np.empty(k, dtype=np.int64)
+        starts[0] = 0
+        starts[1:] = td_idx[:m - eff_w] + 1
+        ends = td_idx[eff_w - 1:]
+
+        w_val = _clipped_window_fdr(
+            pref_tt[ends + 1] - pref_tt[starts],
+            pref_td[ends + 1] - pref_td[starts],
+            pref_dd[ends + 1] - pref_dd[starts],
+        )
+
+        # Average overlapping windows across the m segments [0..t_0], ..., [t_{m-2}+1..t_{m-1}]
+        seg_idx = np.arange(m, dtype=np.int64)
+        k_lo = np.maximum(0, seg_idx - eff_w + 1)
+        k_hi = np.minimum(k - 1, seg_idx)
+        pref_w = np.empty(k + 1, dtype=np.float64)
+        pref_w[0] = 0.0
+        np.cumsum(w_val, out=pref_w[1:])
+        seg_mean = np.clip((pref_w[k_hi + 1] - pref_w[k_lo]) / (k_hi - k_lo + 1), 0.0, 1.0)
+
+        seg_lens = np.empty(m, dtype=np.int64)
+        seg_lens[0] = td_idx[0] + 1
+        seg_lens[1:] = np.diff(td_idx)
+
+        pep = np.empty(n, dtype=np.float64)
+        last_td = int(td_idx[-1])
+        pep[:last_td + 1] = np.repeat(seg_mean, seg_lens)
+
+        if last_td + 1 < n:
+            tail_start = int(starts[-1])
+            tail_ends = np.arange(last_td + 1, n, dtype=np.int64)
+            pep[last_td + 1:] = _clipped_window_fdr(
+                pref_tt[tail_ends + 1] - pref_tt[tail_start],
+                pref_td[tail_ends + 1] - pref_td[tail_start],
+                pref_dd[tail_ends + 1] - pref_dd[tail_start],
+            )
+
+        # Integrate local FDR cumulatively from highest score down to lowest score
+        cum_tt_desc = np.cumsum(tt[::-1])
+        cum_fp_desc = np.cumsum((pep * tt)[::-1])
+        if cum_tt_desc[-1] == 0:
+            fdr_asc = np.minimum.accumulate(pep)
+        else:
+            safe_cum_tt = np.where(cum_tt_desc > 0, cum_tt_desc, 1)
+            global_fdr_desc = np.where(cum_tt_desc > 0, cum_fp_desc / safe_cum_tt, np.inf)
+            fdr_asc = np.minimum.accumulate(global_fdr_desc[::-1])
+
+    working_df = working_df.with_columns(pl.Series('fdr', fdr_asc, dtype=pl.Float64))
     return working_df.sort(order_col)['fdr']
